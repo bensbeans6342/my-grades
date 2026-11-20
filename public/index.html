@@ -81,6 +81,8 @@ col.c-cat{width:170px}
 tr.excl td:not(.acts){opacity:.45;text-decoration:line-through}
 tr.changed td input[data-af=score]{color:var(--wi);font-weight:700}
 tr.hypo td{background:var(--wi-bg)}
+.ro{display:block;padding:6px 9px;border:1px solid transparent}
+.lockedcat{color:var(--muted)}
 .tag{display:inline-block;font-size:11px;font-weight:700;color:var(--wi);border:1px solid var(--wi);border-radius:999px;padding:0 6px;margin-left:4px;vertical-align:middle}
 .addrow td{padding-top:10px;border-bottom:0}
 .addrow input{background:var(--bg);border-color:var(--line)}
@@ -244,12 +246,13 @@ function normalize(s) {
     c.mode = c.mode === 'points' ? 'points' : 'weighted';
     c.categories = Array.isArray(c.categories) ? c.categories : [];
     c.assignments = Array.isArray(c.assignments) ? c.assignments : [];
-    c.assignments.forEach(a => { a.id = a.id || uid(); });
-    // District rule: in each grading period, Major = 60%, Daily/Minor = 40%.
+    // Real (non-what-if) assignments can't be dropped by students.
+    c.assignments.forEach(a => { a.id = a.id || uid(); if (!a.hypo) delete a.excluded; });
+    // District rule: in each grading period, Major = 60%, Daily/Minor = 40%. Always enforced; weights aren't editable.
     c.categories.forEach(k => {
-      if (num(k.weight) == null) { if (/major/i.test(k.name)) k.weight = 60; else if (/minor|daily/i.test(k.name)) k.weight = 40; }
+      if (/major/i.test(k.name || '')) k.weight = 60; else if (/minor|daily/i.test(k.name || '')) k.weight = 40;
     });
-    if (c.categories.length && c.categories.every(k => num(k.weight) > 0)) c.mode = 'weighted';
+    if (c.categories.length) c.mode = 'weighted';
   });
   return s;
 }
@@ -524,7 +527,7 @@ function renderMain() {
   if (!c) {
     m.innerHTML = `<div class="card empty-state">
       <h3>Add your first class</h3>
-      <p>Type a class name on the left, then paste your assignments from Skyward or type them in. You'll see your real grade, try what-if scores, and work out what you need on the next assignment.</p>
+      <p>Type a class name on the left, then pull or paste your assignments from Skyward. You'll see your real grade, try what-if scores, and work out what you need on the next assignment.</p>
       <button data-act="sample">Load a sample class to try it</button>
     </div>`;
     return;
@@ -532,23 +535,39 @@ function renderMain() {
   const cats = usesCats(c);
   const catOpts = sel => c.categories.map(k => `<option value="${k.id}" ${k.id === sel ? 'selected' : ''}>${esc(k.name)}</option>`).join('');
   const shown = c.assignments.filter(a => whatIf || !a.hypo);
+  const catName = id => esc(c.categories.find(k => k.id === id)?.name || '—');
   const rows = shown.map(a => {
-    const val = whatIf && !a.hypo ? (a.wi != null ? a.wi : (a.score ?? '')) : (a.score ?? '');
-    return `<tr data-aid="${a.id}" class="${a.hypo ? 'hypo' : ''} ${a.excluded ? 'excl' : ''} ${whatIf && (a.hypo || a.wi != null) ? 'changed' : ''}">
-      <td><div class="row" style="flex-wrap:nowrap"><input data-af="name" value="${esc(a.name)}" aria-label="Assignment name">${a.hypo ? '<span class="tag">what-if</span>' : ''}</div></td>
+    if (a.hypo) {
+      // What-if assignments the student added: fully editable.
+      return `<tr data-aid="${a.id}" class="hypo ${whatIf ? 'changed' : ''}">
+      <td><div class="row" style="flex-wrap:nowrap"><input data-af="name" value="${esc(a.name)}" aria-label="Assignment name"><span class="tag">what-if</span></div></td>
       ${cats ? `<td><select data-af="cat" aria-label="Category"><option value="">—</option>${catOpts(a.cat)}</select></td>` : ''}
-      <td class="num"><input data-af="score" inputmode="decimal" value="${esc(val)}" placeholder="—" aria-label="Score"></td>
+      <td class="num"><input data-af="score" inputmode="decimal" value="${esc(a.score ?? '')}" placeholder="—" aria-label="Score"></td>
       <td class="num"><input data-af="max" inputmode="decimal" value="${esc(a.max ?? '')}" aria-label="Points possible"></td>
       <td class="num pct" data-pct="${a.id}"></td>
-      <td class="acts"><button class="ghost" data-act="excl" title="${a.excluded ? 'Count this assignment again' : "Don't count this assignment"}">${a.excluded ? 'Count' : 'Drop'}</button><button class="ghost danger" data-act="delA" title="Delete">✕</button></td>
+      <td class="acts"><button class="ghost danger" data-act="delA" title="Delete">✕</button></td>
+    </tr>`;
+    }
+    // Assignments already put in are locked: name, category, points and the real score can't be changed.
+    // In what-if mode the score box sets a temporary what-if score only.
+    const score = whatIf
+      ? `<input data-af="score" inputmode="decimal" value="${esc(a.wi != null ? a.wi : (a.score ?? ''))}" placeholder="—" aria-label="What-if score">`
+      : `<span class="ro">${esc(a.score ?? '—')}</span>`;
+    return `<tr data-aid="${a.id}" class="${whatIf && a.wi != null ? 'changed' : ''}">
+      <td><span class="ro">${esc(a.name)}</span></td>
+      ${cats ? `<td><span class="ro lockedcat">${catName(a.cat)}</span></td>` : ''}
+      <td class="num">${score}</td>
+      <td class="num"><span class="ro">${esc(a.max ?? '—')}</span></td>
+      <td class="num pct" data-pct="${a.id}"></td>
+      <td class="acts"></td>
     </tr>`;
   }).join('');
 
   const catRows = c.categories.map(k => `<tr data-cid="${k.id}">
-      <td><input data-cf="name" value="${esc(k.name)}" aria-label="Category name"></td>
-      <td class="num"><input data-cf="weight" inputmode="decimal" value="${esc(k.weight ?? '')}" aria-label="Weight percent"></td>
+      <td><span class="ro">${esc(k.name)}</span></td>
+      <td class="num"><span class="ro">${esc(k.weight ?? '—')}</span></td>
       <td class="num pct" data-catpct="${k.id}"></td>
-      <td class="acts"><button class="ghost danger" data-act="delCat" title="Delete category">✕</button></td>
+      <td class="acts"></td>
     </tr>`).join('');
 
   m.innerHTML = `
@@ -563,10 +582,6 @@ function renderMain() {
     <div class="controls">
       <button id="wiToggle" data-act="wiToggle" class="wibtn ${whatIf ? 'on' : 'off'}" aria-pressed="${whatIf}">${whatIf ? 'Turn off what-if' : 'Turn on what-if'}</button>
       <button data-act="resetWi" id="resetWi">Reset what-if</button>
-      <select data-f="mode" aria-label="Grading method">
-        <option value="weighted" ${c.mode === 'weighted' ? 'selected' : ''}>Weighted categories</option>
-        <option value="points" ${c.mode === 'points' ? 'selected' : ''}>Total points</option>
-      </select>
     </div>
   </section>
 
@@ -576,13 +591,9 @@ function renderMain() {
     <table>
       <colgroup><col><col class="c-score"><col class="c-max"><col></colgroup>
       <thead><tr><th>Category</th><th class="num">Weight %</th><th class="num">Grade</th><th></th></tr></thead>
-      <tbody>${catRows || '<tr><td colspan="4" class="muted small">No categories yet. Add them (for example Tests 50, Quizzes 30, Homework 20), or switch to "Total points" if your class isn\'t weighted.</td></tr>'}</tbody>
+      <tbody>${catRows || '<tr><td colspan="4" class="muted small">No categories yet.</td></tr>'}</tbody>
     </table>
-    <div class="row" style="margin-top:10px">
-      <input id="ncName" placeholder="Category name" style="flex:1;min-width:140px">
-      <input id="ncWeight" placeholder="Weight %" inputmode="decimal" style="width:100px">
-      <button data-act="addCat">Add category</button>
-    </div>
+    <p class="small muted" style="margin:8px 2px 0">Set by the district: Major 60%, Daily/Minor 40%. These can't be changed.</p>
     <div class="warnline" id="weightWarn"></div>
   </section>` : ''}
 
@@ -594,13 +605,13 @@ function renderMain() {
       <thead><tr><th>Assignment</th>${cats ? '<th>Category</th>' : ''}<th class="num">Score</th><th class="num">Out of</th><th class="num">%</th><th></th></tr></thead>
       <tbody>
         ${rows || `<tr><td colspan="${cats ? 6 : 5}" class="muted small">No assignments yet. Add one below or paste from Skyward.</td></tr>`}
-        <tr class="addrow">
-          <td><input id="naName" placeholder="${whatIf ? 'Hypothetical assignment' : 'New assignment'}"></td>
+        ${!whatIf ? `<tr class="addrow"><td colspan="${cats ? 6 : 5}" class="muted small">Assignments already put in can't be changed. Turn on what-if to try different scores or add a hypothetical assignment.</td></tr>` : `<tr class="addrow">
+          <td><input id="naName" placeholder="Hypothetical assignment"></td>
           ${cats ? `<td><select id="naCat"><option value="">—</option>${catOpts(c.categories[0]?.id)}</select></td>` : ''}
           <td class="num"><input id="naScore" inputmode="decimal" placeholder="Score"></td>
           <td class="num"><input id="naMax" inputmode="decimal" placeholder="Out of"></td>
           <td colspan="2" class="acts"><button class="primary" data-act="addA">Add</button></td>
-        </tr>
+        </tr>`}
       </tbody>
     </table>
   </section>
@@ -627,7 +638,7 @@ function renderMain() {
     <textarea id="pasteBox" placeholder="Paste here…"></textarea>
     <div class="row" style="margin-top:8px">
       <button class="primary" data-act="parse">Read assignments</button>
-      <label class="small muted"><input type="checkbox" id="replaceAll"> Replace this class's existing assignments</label>
+      <span class="small muted">Only adds new assignments. Ones already in this class are skipped and can't be changed.</span>
     </div>
     <div id="previewOut"></div>
   </details>`;
@@ -693,7 +704,7 @@ function refreshNumbers() {
     const uncat = c.assignments.filter(a => !a.hypo && !c.categories.some(k => k.id === a.cat)).length;
     const msgs = [];
     if (c.categories.length && Math.abs(sum - 100) > 0.01) msgs.push(`Weights add up to ${+sum.toFixed(2)}%, not 100%. Grades are scaled to the categories that have scores.`);
-    if (c.categories.length && uncat) msgs.push(`${uncat} assignment${uncat > 1 ? 's have' : ' has'} no category and won't count until you pick one.`);
+    if (c.categories.length && uncat) msgs.push(`${uncat} assignment${uncat > 1 ? 's have' : ' has'} no category and won't count.`);
     ww.textContent = msgs.join(' ');
   }
 }
@@ -786,22 +797,18 @@ main.addEventListener('input', e => {
   if (tr && t.dataset.af) {
     const a = c.assignments.find(x => x.id === tr.dataset.aid); if (!a) return;
     const f = t.dataset.af;
+    if (!a.hypo) {
+      // Locked assignment: only a what-if score is allowed, and only in what-if mode.
+      if (f !== 'score' || !whatIf) return;
+      const v = num(t.value);
+      if (v == null || v === a.score) delete a.wi; else a.wi = v;
+      tr.classList.toggle('changed', a.wi != null);
+      save(); refreshNumbers(); return;
+    }
     if (f === 'name') a.name = t.value;
     else if (f === 'max') a.max = num(t.value);
-    else if (f === 'score') {
-      const v = num(t.value);
-      if (whatIf && !a.hypo) {
-        if (v == null || v === a.score) delete a.wi; else a.wi = v;
-        tr.classList.toggle('changed', a.wi != null);
-      } else a.score = v;
-    }
+    else if (f === 'score') a.score = num(t.value);
     save(); refreshNumbers(); return;
-  }
-  const cr = t.closest('tr[data-cid]');
-  if (cr && t.dataset.cf) {
-    const k = c.categories.find(x => x.id === cr.dataset.cid); if (!k) return;
-    if (t.dataset.cf === 'name') k.name = t.value; else k.weight = num(t.value);
-    save(); refreshNumbers();
   }
 });
 main.addEventListener('change', e => {
@@ -814,11 +821,10 @@ main.addEventListener('change', e => {
     save(); refreshGPA(); return;
   }
   const t = e.target, c = cur(); if (!c) return;
-  if (t.dataset.f === 'mode') { c.mode = t.value; save(); renderMain(); return; }
   if (t.dataset.af === 'cat') {
     const tr = t.closest('tr[data-aid]');
     const a = c.assignments.find(x => x.id === tr.dataset.aid);
-    if (a) { a.cat = t.value || null; save(); refreshNumbers(); }
+    if (a && a.hypo) { a.cat = t.value || null; save(); refreshNumbers(); }
     return;
   }
   if (t.dataset.pi != null && pending) {
@@ -830,7 +836,6 @@ main.addEventListener('change', e => {
 main.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   if (['naName', 'naScore', 'naMax'].includes(e.target.id)) addAssignment();
-  if (['ncName', 'ncWeight'].includes(e.target.id)) addCategory();
   if (['needTarget', 'needN'].includes(e.target.id)) calcNeed();
 });
 main.addEventListener('click', e => {
@@ -852,16 +857,8 @@ main.addEventListener('click', e => {
       c.assignments = c.assignments.filter(x => !x.hypo);
       c.assignments.forEach(x => delete x.wi);
       save(); renderMain(); return;
-    case 'excl': if (a) { a.excluded = !a.excluded; save(); renderMain(); } return;
-    case 'delA': if (a) { c.assignments = c.assignments.filter(x => x !== a); save(); renderMain(); } return;
+    case 'delA': if (a && a.hypo) { c.assignments = c.assignments.filter(x => x !== a); save(); renderMain(); } return;
     case 'addA': return addAssignment();
-    case 'addCat': return addCategory();
-    case 'delCat': {
-      const cid = b.closest('tr[data-cid]').dataset.cid;
-      c.categories = c.categories.filter(k => k.id !== cid);
-      c.assignments.forEach(x => { if (x.cat === cid) x.cat = null; });
-      save(); renderMain(); return;
-    }
     case 'need': return calcNeed();
     case 'parse': {
       const text = $('#pasteBox').value;
@@ -874,24 +871,15 @@ main.addEventListener('click', e => {
 });
 
 function addAssignment() {
-  const c = cur(); if (!c) return;
+  const c = cur(); if (!c || !whatIf) return;
   const name = $('#naName').value.trim();
   const max = num($('#naMax').value);
   if (!name) { $('#naName').focus(); return; }
   if (!(max > 0)) { $('#naMax').focus(); return; }
-  const a = { id: uid(), name, score: num($('#naScore').value), max, cat: $('#naCat')?.value || null };
-  if (whatIf) a.hypo = true;
+  const a = { id: uid(), name, score: num($('#naScore').value), max, cat: $('#naCat')?.value || null, hypo: true };
   c.assignments.push(a);
   save(); renderMain();
   $('#naName')?.focus();
-}
-function addCategory() {
-  const c = cur(); if (!c) return;
-  const name = $('#ncName').value.trim();
-  if (!name) { $('#ncName').focus(); return; }
-  c.categories.push({ id: uid(), name, weight: num($('#ncWeight').value) });
-  save(); renderMain();
-  $('#ncName')?.focus();
 }
 function calcNeed() {
   const c = cur(); if (!c) return;
@@ -908,8 +896,8 @@ function calcNeed() {
 }
 function importPending() {
   const c = cur(); if (!c || !pending) return;
-  const chosen = pending.items.filter(x => x.keep);
-  if ($('#replaceAll')?.checked) c.assignments = c.assignments.filter(a => a.hypo);
+  const have = new Set(c.assignments.filter(a => !a.hypo).map(a => a.name.trim().toLowerCase()));
+  const chosen = pending.items.filter(x => x.keep && !have.has(x.name.trim().toLowerCase()));
   const catByName = name => {
     if (!name) return null;
     let k = c.categories.find(k => k.name.trim().toLowerCase() === name.toLowerCase());
