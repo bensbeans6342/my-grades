@@ -959,8 +959,8 @@ function showServerStatus() {
     if (lastNotes.detailsHtml) h += `<p class="small"><a id="dlDetails" href="#">Download the details page</a> <span class="muted">(remove names before sharing it)</span></p>`;
   }
   h += autoStatusHTML(saved);
-  h += `<div class="autobox"><b class="small">Faster version (no browser)</b>
-    <p class="small muted">One-time step: records the requests a sign-in makes, with your password, login, cookies and sign-in tokens removed, so the site can switch to plain requests.</p>
+  h += `<div class="autobox"><b class="small">Troubleshooting</b>
+    <p class="small muted">If pulls start saying "Fast sign-in stopped" (ClassLink or Skyward changed something), this records one sign-in so it can be fixed. Your password, login, cookies and sign-in tokens are removed.</p>
     <p><button id="captureBtn">Capture sign-in</button></p>${capNote ? `<p class="small ${/^Saved/.test(capNote) ? 'good' : 'warnline'}">${esc(capNote)}</p>` : ''}</div>`;
   if (saved.password) h += `<p class="small muted">Login saved on this device${saved.username ? ' for ' + esc(saved.username) : ''}. <button class="ghost" id="forgetLogin">Forget it</button></p>`;
   box.innerHTML = h;
@@ -1051,8 +1051,131 @@ async function callPull(login, quick, capture) {
   } catch (e) {
     j = { ok: false, error: "Couldn't reach your Worker. Check your connection.", offline: true };
   }
-  if (!j.offline) addUsage(j.elapsedMs || Date.now() - t0);
+  // Only the browser fallback uses Cloudflare's daily browser time; the fast path doesn't.
+  if (!j.offline) addUsage(j.browserMs != null ? j.browserMs : (j.elapsedMs || Date.now() - t0));
+  if (j.ok && j.mode === 'direct') j = await finishDirect(j, login, quick);
+  if (j.fastNote) j.notes = [j.fastNote, ...(j.notes || [])];
   return j;
+}
+
+// ---------- fast path: read Skyward's tables here, then fetch assignments in batches ----------
+const parseHTML = html => new DOMParser().parseFromString(`<!DOCTYPE html><body>${html}</body>`, 'text/html');
+const cellText = el => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
+const AGG = /^(FIN|FINAL|S\d|SE\d|SEM\d?|EX\d?|E\d|Y|YR|AVG)$/i;
+function pickTermLabel(terms, grades, pref) {
+  if (pref) { const t = terms.find(x => x.label.toLowerCase() === pref.toLowerCase()); return t && grades[t.label] ? t.label : null; }
+  const has = t => !!grades[t.label];
+  const cur = terms.filter(t => t.hl && has(t) && !AGG.test(t.label));
+  if (cur.length) return cur[cur.length - 1].label;
+  const per = terms.filter(t => has(t) && !AGG.test(t.label));
+  if (per.length) return per[per.length - 1].label;
+  const any = terms.filter(has);
+  return any.length ? any[any.length - 1].label : null;
+}
+
+// Skyward's Student Grades table → classes with every term's grade and the details link for each.
+function parseSkywardGrid(html) {
+  const doc = parseHTML(html);
+  const hdr = doc.querySelector('tr.unlockedHeaderTableRow');
+  if (!hdr) return null;
+  const heads = [...hdr.querySelectorAll('td, th')].filter(c => !c.classList.contains('browseHeaderSpacer'))
+    .map(c => ({ label: cellText(c), hl: c.classList.contains('progressReportDetailsOpenHeader') }));
+  const terms = heads.slice(2).filter(h => h.label);
+  const missIdx = heads.findIndex(h => /^missing/i.test(h.label));
+  const rows = [];
+  for (const tr of doc.querySelectorAll('tr[id*="_unlockedRow"]')) {
+    const cells = [...tr.querySelectorAll(':scope > td.browseDataCell')];
+    if (!cells.length) continue;
+    const a = cells[0].querySelector('[data-coursedescription]');
+    const spans = [...cells[0].querySelectorAll('span')].map(cellText).filter(Boolean);
+    const name = (a && a.getAttribute('data-coursedescription')) || spans[0] || cellText(cells[0]);
+    const period = spans.find(x => /^period\b/i.test(x)) || '';
+    const missing = missIdx >= 0 && cells[missIdx] ? parseInt(cellText(cells[missIdx]), 10) || 0 : 0;
+    const grades = {};
+    heads.forEach((h, i) => {
+      if (i < 2 || !h.label || !cells[i]) return;
+      const anchor = cells[i].querySelector('[data-postdata]');
+      const text = cellText(cells[i].querySelector('.anchorText')) || cellText(cells[i]).replace(/Opens Details Panel/i, '').trim();
+      if (!text) return;
+      let postdata = null;
+      try { postdata = anchor ? JSON.parse(anchor.getAttribute('data-postdata')) : null; } catch (e) {}
+      grades[h.label] = { text, postdata };
+    });
+    if (name) rows.push({ name, period, missing, grades });
+  }
+  return { terms, rows };
+}
+
+// Skyward's assignment list → categories and assignments.
+function parseSkywardAssignments(html) {
+  const doc = parseHTML(html);
+  const hdr = doc.querySelector('tr.unlockedHeaderTableRow');
+  const labels = hdr ? [...hdr.querySelectorAll('td, th')].filter(c => !c.classList.contains('browseHeaderSpacer')).map(cellText) : [];
+  const col = re => labels.findIndex(l => re.test(l));
+  const iName = col(/description|assignment|name/i), iPts = col(/points/i), iScore = col(/^score/i);
+  const categories = [], assignments = [];
+  let current = null;
+  for (const tr of doc.querySelectorAll('tr[id*="_unlockedRow"]')) {
+    const cells = [...tr.querySelectorAll(':scope > td.browseDataCell')].map(cellText);
+    const name = cells[iName >= 0 ? iName : 1] || '';
+    if (/segmentedBrowseParentRow/.test(tr.className)) {
+      if (name) { current = { id: uid(), name, weight: null }; categories.push(current); }
+      continue;
+    }
+    const pts = (cells[iPts] || '').match(/(-?\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+    let score = null, max = null;
+    if (pts) { score = +pts[1]; max = +pts[2]; }
+    else { const pc = (cells[iScore] || '').match(/^(-?\d+(?:\.\d+)?)\s*%/); if (pc) { score = +pc[1]; max = 100; } }
+    if (!name || score == null || !(max > 0)) continue;
+    assignments.push({ id: uid(), name, score, max, cat: current ? current.id : null });
+  }
+  return { categories, assignments };
+}
+
+async function finishDirect(j, login, quick) {
+  const classes = [], cells = [];
+  for (const html of j.grids || []) {
+    const g = parseSkywardGrid(html);
+    if (!g) continue;
+    for (const r of g.rows) {
+      const label = pickTermLabel(g.terms, r.grades, login.term);
+      const c = {
+        id: uid(), name: r.name, period: r.period, missing: r.missing, mode: 'points', categories: [], assignments: [],
+        skywardGrade: label ? r.grades[label].text : '', term: label || '',
+        termGrades: g.terms.filter(t => r.grades[t.label]).map(t => ({ label: t.label, grade: r.grades[t.label].text, current: t.hl })),
+      };
+      classes.push(c);
+      if (label && r.grades[label].postdata) cells.push({ key: c.id, postdata: r.grades[label].postdata });
+    }
+  }
+  if (!classes.length) return { ok: false, error: "Signed in, but couldn't read the grades table.", steps: j.steps, mode: 'direct' };
+  const notes = [];
+  let read = 0;
+  if (!quick && cells.length) {
+    let session = j.session;
+    for (let i = 0; i < cells.length; i += 12) {
+      let d;
+      try {
+        const r = await fetch('api/details', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                               body: JSON.stringify({ session, cells: cells.slice(i, i + 12) }) });
+        d = await r.json();
+      } catch (e) { d = { ok: false, error: "Couldn't reach your Worker." }; }
+      if (!d.ok) { notes.push(`Couldn't get some assignments: ${d.error}`); break; }
+      session = d.session;
+      for (const det of d.details) {
+        const c = classes.find(x => x.id === det.key);
+        if (!c || !det.html) continue;
+        const a = parseSkywardAssignments(det.html);
+        if (a.assignments.length || a.categories.length) { Object.assign(c, a, { mode: a.categories.length ? 'weighted' : 'points' }); read++; }
+      }
+    }
+    if (read < cells.length && !notes.length) notes.push(`Got assignments for ${read} of ${cells.length} classes.`);
+  }
+  return {
+    ok: true, mode: 'direct', quick: !!quick, notes, steps: [...(j.steps || []), quick ? 'Quick check: grades table only' : `Read assignments for ${read} of ${cells.length} classes`],
+    data: { server: true, pulledAt: j.pulledAt || new Date().toISOString(), classes },
+    elapsedMs: j.elapsedMs, browserMs: 0,
+  };
 }
 
 function setBusy(on, text) {
@@ -1102,7 +1225,7 @@ async function doCapture(login) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([txt], { type: 'application/json' }));
     a.download = 'skyward-capture.json'; document.body.appendChild(a); a.click(); a.remove();
-    capNote = `Saved skyward-capture.json (${j.capture.requests.length} requests). It has your son's grades in it, but not your password, login, cookies or sign-in tokens. Look it over, then send it to finish the faster version.`;
+    capNote = `Saved skyward-capture.json (${j.capture.requests.length} requests). It has your son's grades in it, but not your password, login, cookies or sign-in tokens. Look it over before sharing it.`;
     msg.textContent = 'Capture saved: skyward-capture.json';
   } else {
     capNote = "The capture didn't come back. Make sure the latest files are uploaded to GitHub, then try again.";
@@ -1238,9 +1361,9 @@ function autoStatusHTML(saved) {
   if (!saved.password) h += `<p class="small muted">Needs a saved login: pull once with <b>Remember my login</b> ticked.</p>`;
   else if (a.on) {
     h += `<p class="small muted">Last checked: ${a.lastChecked ? hhmm(a.lastChecked) : 'not yet'}${a.next ? ` · next check about ${hhmm(a.next)}` : ''}<br>`
-       + `Each check takes about 30–40 seconds; the assignment details are only fetched when something changes. You'll get a notification if you allow them.</p>`;
+       + `Each check reads the grades table (a few seconds); assignments are fetched when something changes. You'll get a notification if you allow them.</p>`;
   }
-  h += `<p class="small muted">Free browser time used today: ${(used / 60000).toFixed(1)} of ${FREE_MS / 60000} minutes (resets 6 PM Central).</p>`;
+  if (used > 0) h += `<p class="small muted">Browser fallback time used today: ${(used / 60000).toFixed(1)} of ${FREE_MS / 60000} free minutes (resets 6 PM Central).</p>`;
   if (autoNote) h += `<p class="small ${/^New/.test(autoNote) ? 'good' : 'warnline'}">${esc(autoNote)}</p>`;
   return h + '</div>';
 }
@@ -1253,7 +1376,7 @@ if (serverMode) {
   $('#pullBtn').hidden = false;
   $('#pullBtn').onclick = pullNow;
   $('#localSteps').innerHTML = '<li>Click <b>Pull from Skyward</b> at the top and sign in with your ClassLink login.</li><li>Your grades are saved in this browser. Pull again whenever you want fresh ones.</li>';
-  $('#localNote').textContent = 'Each full pull uses 1–2 minutes of Cloudflare\'s free browser time (10 minutes a day).';
+  $('#localNote').textContent = 'Pulls use plain requests and take a few seconds. Cloudflare\'s free browser time (10 minutes a day) is only used if the fast sign-in fails and it falls back to the browser.';
   showServerStatus();
   if (autoOn()) {
     const a = loadJ(AUTO_KEY, {});
