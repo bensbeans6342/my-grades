@@ -1,5 +1,6 @@
 import { launch } from '@cloudflare/playwright';
 import { pullGrades } from './pull.js';
+import { signInAndOpenGrades, fetchDetails, DirectError } from './direct.js';
 
 // Serves your grade page (from /public) and does one thing on request:
 // POST /api/pull with your ClassLink login -> signs in, reads Skyward, returns your grades.
@@ -16,6 +17,14 @@ export default {
       let body;
       try { body = await request.json(); } catch { return json({ ok: false, error: 'Bad request.' }, 400); }
       return json(await doPull(env, body));
+    }
+    if (url.pathname === '/api/details') {
+      if (request.method !== 'POST') return json({ ok: false, error: 'Use POST.' }, 405);
+      const origin = request.headers.get('Origin');
+      if (origin && origin !== url.origin) return json({ ok: false, error: 'Not allowed.' }, 403);
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Bad request.' }, 400); }
+      return json(await doDetails(body));
     }
     return env.ASSETS.fetch(request);
   },
@@ -42,9 +51,42 @@ function checkInput(b) {
 
 async function doPull(env, body) {
   const started = Date.now();
+  let fastNote;
+  // Fast path: plain requests, no browser (unless capturing or asked for the browser).
+  if (body?.capture !== true && body?.mode !== 'browser') {
+    const { cfg, error } = checkInput(body);
+    if (error) return { ok: false, error, elapsedMs: 0, browserMs: 0 };
+    const steps = [];
+    try {
+      const r = await signInAndOpenGrades({ url: cfg.url, username: cfg.username, password: cfg.password, log: m => steps.push(m) });
+      return { ok: true, mode: 'direct', grids: r.grids, session: r.session, steps, quick: cfg.quick,
+               pulledAt: new Date().toISOString(), elapsedMs: Date.now() - started, browserMs: 0 };
+    } catch (e) {
+      if (e instanceof DirectError && e.auth) return { ok: false, error: e.message, steps, elapsedMs: Date.now() - started, browserMs: 0 };
+      fastNote = `Fast sign-in stopped (${String(e.message || e).slice(0, 160)}${steps.length ? `; got as far as: ${steps[steps.length - 1]}` : ''}), so the browser was used.`;
+    }
+  }
+  const t1 = Date.now();
   const result = await pullOnce(env, body);
-  result.elapsedMs = Date.now() - started;   // lets the page keep track of today's free browser time
+  result.mode = 'browser';
+  result.elapsedMs = Date.now() - started;
+  result.browserMs = Date.now() - t1;   // lets the page keep track of today's free browser time
+  if (fastNote) result.fastNote = fastNote;
   return result;
+}
+
+async function doDetails(body) {
+  const cells = Array.isArray(body?.cells) ? body.cells.slice(0, 15) : [];
+  const session = body?.session;
+  if (!session || !session.sky || !Array.isArray(session.jar) || !/^https:\/\/[^/]*skyward[^/]*\//i.test(String(session.sky.base) + '/')) {
+    return { ok: false, error: 'Bad request.' };
+  }
+  try {
+    const r = await fetchDetails({ session, cells });
+    return { ok: true, details: r.details, session: r.session };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e).slice(0, 200) };
+  }
 }
 
 async function pullOnce(env, body) {
