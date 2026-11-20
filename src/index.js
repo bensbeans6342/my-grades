@@ -36,7 +36,8 @@ export default {
 // They pre-fill the sign-in box and are used for any of those boxes left blank.
 function districtDefaults(env) {
   const v = k => (typeof env[k] === 'string' ? env[k].trim() : '');
-  return { classlinkUrl: v('CLASSLINK_URL'), launchUrl: v('SKYWARD_LINK'), tenantCode: v('CLASSLINK_CODE'), userDomain: v('USERNAME_DOMAIN') };
+  const url = k => { const x = v(k); return x && !/^https?:\/\//i.test(x) ? 'https://' + x : x; };
+  return { classlinkUrl: url('CLASSLINK_URL'), launchUrl: url('SKYWARD_LINK'), tenantCode: v('CLASSLINK_CODE'), userDomain: v('USERNAME_DOMAIN') };
 }
 function withDefaults(env, body) {
   if (!body || typeof body !== 'object') return body;
