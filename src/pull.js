@@ -37,6 +37,7 @@ const JUNK_RE = /^([A-F][+-]?|-?\d+(\.\d+)?%?|\d{1,2}\/\d{1,2}|\*|-|—|(due|ass
 const HEADING_SKIP = /^(class grades?|grade info|gradebook|close|print)$/i;
 
 import { readQGridInPage, pullQmlativ } from './qmlativ.js';
+import { startCapture } from './capture.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -276,11 +277,12 @@ export async function pullGrades(browser, cfg) {
   const context = page.context();
   pullGrades.lastContext = context;
   pullGrades.lastPage = null;
+  pullGrades.capture = cfg.capture ? startCapture(context, { password: cfg.password, username: cfg.username }) : null;
   await page.goto(cfg.url.includes('://') ? cfg.url : 'https://' + cfg.url);
   log('Opened ClassLink');
   await signIn(context, cfg.username, cfg.password, log, cfg.gradesUrl);
   const { page: gbPage, frame, kind } = await waitForGradebook(context, 90000, cfg.gradesUrl, cfg.onUnknownLayout);
-  if (kind === 'qmlativ') return pullQmlativ({ context, page: gbPage, frame, term: cfg.term, log, PullError });
+  if (kind === 'qmlativ') return pullQmlativ({ context, page: gbPage, frame, term: cfg.term, quick: !!cfg.quick, log, PullError });
   const links = await chooseLinks(frame, cfg.term);
   if (!links.length) throw new PullError(`No grades found${cfg.term ? ' for term ' + cfg.term : ''} in Gradebook.`);
   log(`Found ${links.length} classes`);

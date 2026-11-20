@@ -223,7 +223,7 @@ export function parseQDetails(d) {
 }
 
 // ---------------------------------------------------------------- the whole pull for this layout
-export async function pullQmlativ({ context, page, frame, term, log, PullError }) {
+export async function pullQmlativ({ context, page, frame, term, quick, log, PullError }) {
   let grid = await frame.evaluate(readQGridInPage);
   if (!grid || !grid.rows.length) throw new PullError('Found the Student Grades page but no class grades on it.');
   log(`Found ${grid.rows.length} classes (Student Grades page)`);
@@ -245,7 +245,7 @@ export async function pullQmlativ({ context, page, frame, term, log, PullError }
     };
     classes.push(cls);
     const g = label && row0.grades[label];
-    if (!g || !g.clickable || nothingOpened >= 2) continue;
+    if (quick || !g || !g.clickable || nothingOpened >= 2) continue;
 
     // Open this class's details
     const pagesBefore = context.pages().length;
@@ -305,6 +305,7 @@ export async function pullQmlativ({ context, page, frame, term, log, PullError }
       await sleep(500);
     }
   }
+  if (quick) { log('Quick check: read the grades table only'); return { classes, notes: [], detailsHtml: null }; }
   log(`Read assignments for ${detailsRead} of ${classes.length} classes`);
   if (!detailsRead && !firstUnreadDetails) firstUnreadDetails = await frame.evaluate(() => document.body.outerHTML.slice(0, 1500000)).catch(() => null);
   const notes = [];

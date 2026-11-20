@@ -36,10 +36,18 @@ function checkInput(b) {
     try { if (new URL(gradesUrl).protocol !== 'https:') throw 0; } catch { return { error: 'The grades page address must start with https://' }; }
   }
   if (gradesUrl === null || term === null) return { error: 'Bad request.' };
-  return { cfg: { url: cl.href, username, password, gradesUrl: gradesUrl || null, term: term || null } };
+  return { cfg: { url: cl.href, username, password, gradesUrl: gradesUrl || null, term: term || null,
+                  quick: b.quick === true && b.capture !== true, capture: b.capture === true } };
 }
 
 async function doPull(env, body) {
+  const started = Date.now();
+  const result = await pullOnce(env, body);
+  result.elapsedMs = Date.now() - started;   // lets the page keep track of today's free browser time
+  return result;
+}
+
+async function pullOnce(env, body) {
   const { cfg, error: inputError } = checkInput(body);
   if (inputError) return { ok: false, error: inputError };
   const steps = [];
@@ -49,7 +57,8 @@ async function doPull(env, body) {
     const { classes, notes, detailsHtml } = await pullGrades(browser, {
       ...cfg, log: m => steps.push(m), onUnknownLayout: html => { pageHtml = html; },
     });
-    return { ok: true, data: { server: true, pulledAt: new Date().toISOString(), classes }, notes, detailsHtml, steps };
+    const capture = await stopCapture();
+    return { ok: true, quick: cfg.quick, data: { server: true, pulledAt: new Date().toISOString(), classes }, notes, detailsHtml, steps, capture };
   } catch (e) {
     let screenshot = null;
     try {
@@ -58,10 +67,18 @@ async function doPull(env, body) {
       const last = lp && !lp.isClosed() ? lp : pages[pages.length - 1];
       if (last) screenshot = 'data:image/png;base64,' + Buffer.from(await last.screenshot()).toString('base64');
     } catch (_) {}
-    return { ok: false, error: friendly(e), steps, screenshot, pageHtml: pageHtml ? pageHtml.slice(0, 2_000_000) : null };
+    const capture = await stopCapture();
+    return { ok: false, error: friendly(e), steps, screenshot, pageHtml: pageHtml ? pageHtml.slice(0, 2_000_000) : null, capture };
   } finally {
     try { await browser?.close(); } catch (_) {}
   }
+}
+
+async function stopCapture() {
+  const c = pullGrades.capture;
+  pullGrades.capture = null;
+  if (!c) return undefined;
+  try { return await c.stop(); } catch { return null; }
 }
 
 function friendly(e) {
