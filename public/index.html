@@ -960,7 +960,7 @@ function showServerStatus() {
   }
   h += autoStatusHTML(saved);
   h += `<div class="autobox"><b class="small">Troubleshooting</b>
-    <p class="small muted">If pulls start saying "Fast sign-in stopped" (ClassLink or Skyward changed something), this records one sign-in so it can be fixed. Your password, login, cookies and sign-in tokens are removed.</p>
+    <p class="small muted">If pulls start failing because ClassLink or Skyward changed something, this records one sign-in (using a browser on Cloudflare, about a minute) so it can be fixed. Your password, login, cookies and sign-in tokens are removed.</p>
     <p><button id="captureBtn">Capture sign-in</button></p>${capNote ? `<p class="small ${/^Saved/.test(capNote) ? 'good' : 'warnline'}">${esc(capNote)}</p>` : ''}</div>`;
   if (saved.password) h += `<p class="small muted">Login saved on this device${saved.username ? ' for ' + esc(saved.username) : ''}. <button class="ghost" id="forgetLogin">Forget it</button></p>`;
   box.innerHTML = h;
@@ -1300,10 +1300,6 @@ async function autoCheck() {
   if (!login.password) { setAuto(false); autoNote = 'Automatic checks need a saved login. Pull once with "Remember my login" ticked.'; showServerStatus(); return; }
   if (pulling) { scheduleAuto(2 * 60 * 1000); return; }
   if (!navigator.onLine) { autoNote = 'Offline. Will try again later.'; scheduleAuto(); return; }
-  if (usageToday() > BUDGET_MS) {
-    autoNote = "Paused: today's free browser time is nearly used up. Checks resume after 6 PM Central.";
-    scheduleAuto(); return;
-  }
   setBusy(true, 'Checking...');
   $('#pullMsg').textContent = 'Checking for new grades...';
   const q = await callPull(login, true);
@@ -1330,13 +1326,10 @@ async function autoCheck() {
     $('#pullMsg').textContent = `No new grades (checked ${hhmm(Date.now())}).`;
     setBusy(false); scheduleAuto(); return;
   }
-  // Something changed: get the assignment details too, if there's browser time left today.
-  let full = null;
-  if (usageToday() < BUDGET_MS) {
-    setBusy(true, 'Getting details...');
-    $('#pullMsg').textContent = 'New grades found. Getting the details...';
-    full = await callPull(login, false);
-  }
+  // Something changed: get the assignment details too.
+  setBusy(true, 'Getting details...');
+  $('#pullMsg').textContent = 'New grades found. Getting the details...';
+  const full = await callPull(login, false);
   if (full && full.ok) { sky = full.data; lastNotes = { notes: full.notes, detailsHtml: full.detailsHtml }; applySkyward(); }
   else applyQuick(q.data);
   announce(changes);
@@ -1363,7 +1356,7 @@ function autoStatusHTML(saved) {
     h += `<p class="small muted">Last checked: ${a.lastChecked ? hhmm(a.lastChecked) : 'not yet'}${a.next ? ` · next check about ${hhmm(a.next)}` : ''}<br>`
        + `Each check reads the grades table (a few seconds); assignments are fetched when something changes. You'll get a notification if you allow them.</p>`;
   }
-  if (used > 0) h += `<p class="small muted">Browser fallback time used today: ${(used / 60000).toFixed(1)} of ${FREE_MS / 60000} free minutes (resets 6 PM Central).</p>`;
+  if (used > 0) h += `<p class="small muted">Browser time used today by Capture sign-in: ${(used / 60000).toFixed(1)} of ${FREE_MS / 60000} free minutes (resets 6 PM Central).</p>`;
   if (autoNote) h += `<p class="small ${/^New/.test(autoNote) ? 'good' : 'warnline'}">${esc(autoNote)}</p>`;
   return h + '</div>';
 }
@@ -1376,7 +1369,7 @@ if (serverMode) {
   $('#pullBtn').hidden = false;
   $('#pullBtn').onclick = pullNow;
   $('#localSteps').innerHTML = '<li>Click <b>Pull from Skyward</b> at the top and sign in with your ClassLink login.</li><li>Your grades are saved in this browser. Pull again whenever you want fresh ones.</li>';
-  $('#localNote').textContent = 'Pulls use plain requests and take a few seconds. Cloudflare\'s free browser time (10 minutes a day) is only used if the fast sign-in fails and it falls back to the browser.';
+  $('#localNote').textContent = 'Pulls use plain requests and take a few seconds.';
   showServerStatus();
   if (autoOn()) {
     const a = loadJ(AUTO_KEY, {});
