@@ -96,6 +96,9 @@ details.card[open]>summary{margin-bottom:10px}
 .gpatable td input{width:70px}
 .gpatable select{max-width:190px}
 input.gchanged{color:var(--wi);font-weight:700}
+.autobox{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:var(--bg)}
+.autobox label.check{display:flex;gap:8px;align-items:flex-start;font-size:14px;font-weight:600}
+.autobox p{margin:6px 0 0}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:60px 16px;z-index:20;overflow:auto}
 .signin{width:100%;max-width:440px}
 .signin label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);margin-bottom:10px}
@@ -338,11 +341,17 @@ function gpaPoints(grade, level) {
   for (const row of GPA_TABLE) if (g >= row[0]) return row[4 - level];
   return 0;
 }
-// A period/exam grade: your override, else the class's calculated grade for its current term, else Skyward's.
+// A period/exam grade: your override; else Skyward's posted grade. For the current term, the page's
+// calculated grade is used instead if you've entered what-if scores in that class (or Skyward has none).
 function defaultTerm(c, label) {
-  if (c.term === label) { const p = calc(c, true).pct; if (p != null) return Math.round(p * 100) / 100; }
   const t = (c.termGrades || []).find(x => x.label === label);
-  return t ? num(t.grade) : null;
+  const posted = t ? num(t.grade) : null;
+  if (c.term === label) {
+    const hasWhatIf = c.assignments.some(a => a.hypo || a.wi != null);
+    const p = calc(c, true).pct;
+    if (p != null && (hasWhatIf || posted == null)) return Math.round(p * 100) / 100;
+  }
+  return posted;
 }
 function termVal(c, label) {
   const ov = c.gpa && c.gpa.ov ? c.gpa.ov[label] : undefined;
@@ -393,7 +402,7 @@ function renderGPA() {
     <div class="big"><div class="lbl">Semester 2 GPA</div><div class="num" id="gpaS1"></div></div>
     <div class="big"><div class="lbl">Overall (all semesters so far)</div><div class="num" id="gpaAll"></div></div>
   </section>
-  <p class="small muted" style="margin:-6px 2px 14px">Grades are filled in from Skyward (and from this page's calculated grade for the current period, including what-if scores). Change any of them to see what happens. Changed ones are purple.</p>
+  <p class="small muted" style="margin:-6px 2px 14px">Grades are filled in from Skyward. If you've tried what-if scores in a class, its current period uses that what-if grade instead. Change any of them to see what happens. Changed ones are purple.</p>
   ${SEMS.map(semTable).join('')}
   <details class="card">
     <summary>How it's calculated</summary>
@@ -907,7 +916,7 @@ function applySkyward() {
   sky.classes.forEach(sc => {
     const fresh = normalize({ classes: [JSON.parse(JSON.stringify(sc))] }).classes[0];
     const i = state.classes.findIndex(c => c.name.trim().toLowerCase() === fresh.name.trim().toLowerCase());
-    if (i >= 0) { fresh.id = state.classes[i].id; state.classes[i] = fresh; }
+    if (i >= 0) { fresh.id = state.classes[i].id; if (state.classes[i].gpa) fresh.gpa = state.classes[i].gpa; state.classes[i] = fresh; }
     else state.classes.push(fresh);
   });
   state.lastPulled = sky.pulledAt;
@@ -949,10 +958,18 @@ function showServerStatus() {
     h += lastNotes.notes.map(n => `<p class="warnline">${esc(n)}</p>`).join('');
     if (lastNotes.detailsHtml) h += `<p class="small"><a id="dlDetails" href="#">Download the details page</a> <span class="muted">(remove names before sharing it)</span></p>`;
   }
+  h += autoStatusHTML(saved);
+  h += `<div class="autobox"><b class="small">Faster version (no browser)</b>
+    <p class="small muted">One-time step: records the requests a sign-in makes, with your password, login, cookies and sign-in tokens removed, so the site can switch to plain requests.</p>
+    <p><button id="captureBtn">Capture sign-in</button></p>${capNote ? `<p class="small ${/^Saved/.test(capNote) ? 'good' : 'warnline'}">${esc(capNote)}</p>` : ''}</div>`;
   if (saved.password) h += `<p class="small muted">Login saved on this device${saved.username ? ' for ' + esc(saved.username) : ''}. <button class="ghost" id="forgetLogin">Forget it</button></p>`;
   box.innerHTML = h;
   const fl = $('#forgetLogin');
-  if (fl) fl.onclick = () => { const s = loadLogin(); delete s.password; delete s.username; saveLogin(s); showServerStatus(); };
+  if (fl) fl.onclick = () => { const s = loadLogin(); delete s.password; delete s.username; saveLogin(s); setAuto(false); };
+  const cb = $('#captureBtn');
+  if (cb) { cb.disabled = pulling; cb.onclick = captureNow; }
+  const at = $('#autoToggle');
+  if (at) at.onchange = () => setAuto(at.checked);
   const dd = $('#dlDetails');
   if (dd) dd.onclick = e => {
     e.preventDefault();
@@ -969,7 +986,7 @@ function showServerStatus() {
   };
 }
 
-function openSignIn() {
+function openSignIn(opts = {}) {
   const saved = loadLogin();
   $('#signin')?.remove();
   const ov = document.createElement('div');
@@ -1002,7 +1019,7 @@ function openSignIn() {
     if (f.remember.checked) saveLogin(login);
     else saveLogin({ classlinkUrl: login.classlinkUrl, gradesUrl: login.gradesUrl, term: login.term });
     ov.remove();
-    doPull(login);
+    if (opts.capture) doCapture(login); else doPull(login);
   };
 }
 
@@ -1011,32 +1028,221 @@ function pullNow() {
   if (s.classlinkUrl && s.username && s.password) doPull(s); else openSignIn();
 }
 
-async function doPull(login) {
-  const btn = $('#pullBtn'), msg = $('#pullMsg');
-  btn.disabled = true; btn.textContent = 'Pulling...';
-  msg.textContent = 'Signing in to Skyward. This takes about a minute.';
+// ---------- talking to the Worker ----------
+const AUTO_KEY = 'mygrades.auto', USE_KEY = 'mygrades.usage';
+const loadJ = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
+const saveJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const utcDay = () => new Date().toISOString().slice(0, 10);   // Cloudflare's daily limit resets at midnight UTC
+const usageToday = () => { const u = loadJ(USE_KEY, {}); return u.day === utcDay() ? u.ms || 0 : 0; };
+const addUsage = ms => { const u = loadJ(USE_KEY, {}), d = utcDay(); saveJ(USE_KEY, { day: d, ms: (u.day === d ? u.ms || 0 : 0) + (ms || 0) }); };
+const FREE_MS = 10 * 60 * 1000, BUDGET_MS = 8.5 * 60 * 1000;   // stop auto-checks with headroom left for a manual pull
+let pulling = false;
+
+async function callPull(login, quick, capture) {
+  const t0 = Date.now();
+  let j;
   try {
     const r = await fetch('api/pull', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ classlinkUrl: login.classlinkUrl, gradesUrl: login.gradesUrl || '', term: login.term || '',
-                             username: login.username, password: login.password }),
+                             username: login.username, password: login.password, quick: !!quick, capture: !!capture }),
     });
-    const j = await r.json().catch(() => ({ ok: false, error: `Server error (${r.status}).` }));
-    if (j.ok) {
-      sky = j.data; lastFailure = null; lastNotes = { notes: j.notes, detailsHtml: j.detailsHtml }; applySkyward();
-      if ((j.notes || []).length) $('#skyHelp').open = true;
-      msg.textContent = `Updated ${sky.classes.length} class${sky.classes.length === 1 ? '' : 'es'}.`;
-    } else {
-      lastFailure = j;
-      msg.textContent = 'Pull failed. See "Update from Skyward" on the left.';
-      $('#skyHelp').open = true;
-    }
+    j = await r.json().catch(() => ({ ok: false, error: `Server error (${r.status}).` }));
   } catch (e) {
-    lastFailure = { error: "Couldn't reach your Worker. Check your connection." };
-    msg.textContent = lastFailure.error;
+    j = { ok: false, error: "Couldn't reach your Worker. Check your connection.", offline: true };
   }
+  if (!j.offline) addUsage(j.elapsedMs || Date.now() - t0);
+  return j;
+}
+
+function setBusy(on, text) {
+  pulling = on;
+  const btn = $('#pullBtn');
+  btn.disabled = on; btn.textContent = on ? (text || 'Pulling...') : 'Pull from Skyward';
+}
+
+async function doPull(login) {
+  if (pulling) return;
+  const msg = $('#pullMsg');
+  setBusy(true);
+  msg.textContent = 'Signing in to Skyward. This takes about a minute.';
+  const j = await callPull(login, false);
+  if (j.ok) {
+    sky = j.data; lastFailure = null; lastNotes = { notes: j.notes, detailsHtml: j.detailsHtml }; applySkyward();
+    if ((j.notes || []).length) $('#skyHelp').open = true;
+    msg.textContent = `Updated ${sky.classes.length} class${sky.classes.length === 1 ? '' : 'es'}.`;
+    const a = loadJ(AUTO_KEY, {}); a.lastChecked = Date.now(); saveJ(AUTO_KEY, a);
+  } else {
+    lastFailure = j;
+    msg.textContent = 'Pull failed. See "Update from Skyward" on the left.';
+    $('#skyHelp').open = true;
+  }
+  setBusy(false);
   showServerStatus();
-  btn.disabled = false; btn.textContent = 'Pull from Skyward';
+}
+
+// ---------- one-time capture of the sign-in requests (to build the no-browser version) ----------
+function captureNow() {
+  const s = loadLogin();
+  if (s.classlinkUrl && s.username && s.password) doCapture(s); else openSignIn({ capture: true });
+}
+async function doCapture(login) {
+  if (pulling) return;
+  const msg = $('#pullMsg');
+  setBusy(true, 'Capturing...');
+  msg.textContent = 'Signing in and recording the requests. This takes a minute or two.';
+  const j = await callPull(login, false, true);
+  if (j.ok) { sky = j.data; lastFailure = null; lastNotes = { notes: j.notes, detailsHtml: j.detailsHtml }; applySkyward(); }
+  else lastFailure = j;
+  if (j.capture) {
+    // Extra safety: make sure the password and username aren't anywhere in the file.
+    let txt = JSON.stringify({ note: 'Recorded by My Grades. Password, login, cookies and sign-in tokens removed.', pullSucceeded: !!j.ok, error: j.ok ? undefined : j.error, steps: j.steps, ...j.capture }, null, 1);
+    const scrub = (w, label) => { if (w && w.length >= 3) for (const v of new Set([w, encodeURIComponent(w)])) txt = txt.split(v).join(label); };
+    scrub(login.password, '[PASSWORD]'); scrub(login.username, '[LOGIN]');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([txt], { type: 'application/json' }));
+    a.download = 'skyward-capture.json'; document.body.appendChild(a); a.click(); a.remove();
+    capNote = `Saved skyward-capture.json (${j.capture.requests.length} requests). It has your son's grades in it, but not your password, login, cookies or sign-in tokens. Look it over, then send it to finish the faster version.`;
+    msg.textContent = 'Capture saved: skyward-capture.json';
+  } else {
+    capNote = "The capture didn't come back. Make sure the latest files are uploaded to GitHub, then try again.";
+    msg.textContent = 'Capture failed.';
+  }
+  setBusy(false);
+  $('#skyHelp').open = true;
+  showServerStatus();
+}
+let capNote = '';
+
+// ---------- automatic checks while this page is open ----------
+let autoTimer = null, autoNote = '', autoFails = 0, unseen = 0;
+const baseTitle = document.title;
+const autoOn = () => !!loadJ(AUTO_KEY, {}).on;
+const hhmm = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+function scheduleAuto(firstDelayMs) {
+  clearTimeout(autoTimer); autoTimer = null;
+  const a = loadJ(AUTO_KEY, {});
+  if (!a.on) return;
+  const delay = firstDelayMs != null ? firstDelayMs : (15 + Math.random() * 5) * 60 * 1000;
+  a.next = Date.now() + delay; saveJ(AUTO_KEY, a);
+  autoTimer = setTimeout(autoCheck, delay);
+  showServerStatus();
+}
+
+function diffGrades(newClasses) {
+  const changes = [];
+  const key = n => String(n || '').trim().toLowerCase();
+  for (const nc of newClasses) {
+    const oc = state.classes.find(c => key(c.name) === key(nc.name));
+    if (!oc) { changes.push(`${nc.name}: new class`); continue; }
+    const old = new Map((oc.termGrades || []).map(t => [t.label, t.grade]));
+    for (const t of nc.termGrades || []) {
+      if (old.get(t.label) !== t.grade) changes.push(`${nc.name} ${t.label}: ${old.has(t.label) ? old.get(t.label) : '—'} → ${t.grade}`);
+    }
+    if (!(nc.termGrades || []).length && String(oc.skywardGrade || '') !== String(nc.skywardGrade || '')) {
+      changes.push(`${nc.name}: ${oc.skywardGrade || '—'} → ${nc.skywardGrade || '—'}`);
+    }
+    if ((oc.missing || 0) !== (nc.missing || 0)) {
+      changes.push(`${nc.name}: ${nc.missing || 0} missing assignment${nc.missing === 1 ? '' : 's'} (was ${oc.missing || 0})`);
+    }
+  }
+  return changes;
+}
+
+// Update class-level grades from a quick check without touching assignments.
+function applyQuick(data) {
+  const key = n => String(n || '').trim().toLowerCase();
+  for (const nc of data.classes) {
+    const oc = state.classes.find(c => key(c.name) === key(nc.name));
+    if (oc) Object.assign(oc, { termGrades: nc.termGrades, skywardGrade: nc.skywardGrade, term: nc.term, missing: nc.missing, period: nc.period || oc.period });
+    else state.classes.push(normalize({ classes: [JSON.parse(JSON.stringify(nc))] }).classes[0]);
+  }
+  state.lastPulled = data.pulledAt;
+  save(); renderAll(); showSync();
+}
+
+function announce(changes) {
+  const short = changes.slice(0, 4).join('\n') + (changes.length > 4 ? `\n…and ${changes.length - 4} more` : '');
+  $('#pullMsg').textContent = `New grades: ${changes[0]}${changes.length > 1 ? ` (+${changes.length - 1} more)` : ''}`;
+  autoNote = 'New at ' + hhmm(Date.now()) + ': ' + changes.join('; ');
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification('New grades', { body: short }); } catch (e) {}
+  if (document.hidden) { unseen += changes.length; document.title = `(${unseen}) ${baseTitle}`; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { unseen = 0; document.title = baseTitle; } });
+
+async function autoCheck() {
+  const login = loadLogin();
+  if (!autoOn()) return;
+  if (!login.password) { setAuto(false); autoNote = 'Automatic checks need a saved login. Pull once with "Remember my login" ticked.'; showServerStatus(); return; }
+  if (pulling) { scheduleAuto(2 * 60 * 1000); return; }
+  if (!navigator.onLine) { autoNote = 'Offline. Will try again later.'; scheduleAuto(); return; }
+  if (usageToday() > BUDGET_MS) {
+    autoNote = "Paused: today's free browser time is nearly used up. Checks resume after 6 PM Central.";
+    scheduleAuto(); return;
+  }
+  setBusy(true, 'Checking...');
+  $('#pullMsg').textContent = 'Checking for new grades...';
+  const q = await callPull(login, true);
+  const a = loadJ(AUTO_KEY, {});
+  if (!q.ok && q.offline) {
+    autoNote = "Couldn't reach your Worker. Will try again at the next check.";
+    setBusy(false); $('#pullMsg').textContent = ''; scheduleAuto(); showServerStatus(); return;
+  }
+  if (!q.ok) {
+    autoFails++;
+    lastFailure = q;
+    if (autoFails >= 3) {
+      setAuto(false);
+      autoNote = 'Automatic checks stopped after 3 failed checks in a row, so your account isn\'t signed into over and over. Fix the problem above, then turn them back on.';
+    } else autoNote = `Last check failed (${autoFails} of 3 before stopping).`;
+    setBusy(false); $('#pullMsg').textContent = 'Automatic check failed.';
+    $('#skyHelp').open = true; scheduleAuto(); showServerStatus(); return;
+  }
+  autoFails = 0; lastFailure = null;
+  a.lastChecked = Date.now(); saveJ(AUTO_KEY, a);
+  const changes = state.classes.length ? diffGrades(q.data.classes) : ['Grades loaded'];
+  if (!changes.length) {
+    autoNote = '';
+    $('#pullMsg').textContent = `No new grades (checked ${hhmm(Date.now())}).`;
+    setBusy(false); scheduleAuto(); return;
+  }
+  // Something changed: get the assignment details too, if there's browser time left today.
+  let full = null;
+  if (usageToday() < BUDGET_MS) {
+    setBusy(true, 'Getting details...');
+    $('#pullMsg').textContent = 'New grades found. Getting the details...';
+    full = await callPull(login, false);
+  }
+  if (full && full.ok) { sky = full.data; lastNotes = { notes: full.notes, detailsHtml: full.detailsHtml }; applySkyward(); }
+  else applyQuick(q.data);
+  announce(changes);
+  setBusy(false); scheduleAuto();
+}
+
+function setAuto(on) {
+  const a = loadJ(AUTO_KEY, {}); a.on = !!on; if (!on) delete a.next; saveJ(AUTO_KEY, a);
+  if (on) {
+    autoFails = 0; autoNote = '';
+    try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+    const since = Date.now() - (a.lastChecked || 0);
+    scheduleAuto(since > 15 * 60 * 1000 ? 5000 : 15 * 60 * 1000 - since);
+  } else { clearTimeout(autoTimer); autoTimer = null; }
+  showServerStatus();
+}
+
+function autoStatusHTML(saved) {
+  const a = loadJ(AUTO_KEY, {});
+  const used = usageToday();
+  let h = `<div class="autobox"><label class="check"><input type="checkbox" id="autoToggle" ${a.on ? 'checked' : ''} ${saved.password ? '' : 'disabled'}> Check for new grades every 15–20 minutes while this page is open</label>`;
+  if (!saved.password) h += `<p class="small muted">Needs a saved login: pull once with <b>Remember my login</b> ticked.</p>`;
+  else if (a.on) {
+    h += `<p class="small muted">Last checked: ${a.lastChecked ? hhmm(a.lastChecked) : 'not yet'}${a.next ? ` · next check about ${hhmm(a.next)}` : ''}<br>`
+       + `Each check takes about 30–40 seconds; the assignment details are only fetched when something changes. You'll get a notification if you allow them.</p>`;
+  }
+  h += `<p class="small muted">Free browser time used today: ${(used / 60000).toFixed(1)} of ${FREE_MS / 60000} minutes (resets 6 PM Central).</p>`;
+  if (autoNote) h += `<p class="small ${/^New/.test(autoNote) ? 'good' : 'warnline'}">${esc(autoNote)}</p>`;
+  return h + '</div>';
 }
 if (sky && sky.source === 'colab') {
   $('#localSteps').innerHTML = '<li>In the Colab notebook, run the <b>Sign in</b> and <b>Pull my grades</b> cells again.</li><li>Run <b>Show my grades</b>, then <b>Download</b> to save this page with the new grades.</li>';
@@ -1047,8 +1253,13 @@ if (serverMode) {
   $('#pullBtn').hidden = false;
   $('#pullBtn').onclick = pullNow;
   $('#localSteps').innerHTML = '<li>Click <b>Pull from Skyward</b> at the top and sign in with your ClassLink login.</li><li>Your grades are saved in this browser. Pull again whenever you want fresh ones.</li>';
-  $('#localNote').textContent = 'Each pull uses about a minute of Cloudflare\'s free browser time (10 minutes a day).';
+  $('#localNote').textContent = 'Each full pull uses 1–2 minutes of Cloudflare\'s free browser time (10 minutes a day).';
   showServerStatus();
+  if (autoOn()) {
+    const a = loadJ(AUTO_KEY, {});
+    const since = Date.now() - (a.lastChecked || 0);
+    scheduleAuto(since > 15 * 60 * 1000 ? 10000 : 15 * 60 * 1000 - since);
+  }
 }
 
 renderAll();
