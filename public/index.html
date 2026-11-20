@@ -1212,8 +1212,9 @@ async function finishDirect(j, login, quick) {
   const notes = [], errs = new Set(), unread = [];
   let read = 0, detailsHtml = null;
   if (!quick && cells.length < classes.length) {
-    const none = classes.filter(c => !cells.some(x => x.key === c.id)).map(c => c.name);
-    notes.push(`Skyward's grades table had no link to the assignments for ${none.length === classes.length ? 'any class' : none.join(', ')}, so no assignments were read for ${none.length === 1 ? 'it' : 'them'}.`);
+    // Classes with no grade this term (Advisory and the like) have nothing to open, so they're not mentioned.
+    const none = classes.filter(c => c.skywardGrade && !cells.some(x => x.key === c.id)).map(c => c.name);
+    if (none.length) notes.push(`Skyward's grades table had no link to the assignments for ${none.length === classes.length ? 'any class' : none.join(', ')}, so no assignments were read for ${none.length === 1 ? 'it' : 'them'}.`);
   }
   if (!quick && cells.length) {
     let session = j.session;
@@ -1236,7 +1237,7 @@ async function finishDirect(j, login, quick) {
       for (const det of d.details) {
         const c = classes.find(x => x.id === det.key);
         if (!c) continue;
-        if (det.error) { failed[det.key] = (failed[det.key] || 0) + 1; errs.add(det.error); if (failed[det.key] >= 2) done.add(det.key); continue; }
+        if (det.error) { if (det.pane && !detailsHtml) detailsHtml = det.pane; failed[det.key] = (failed[det.key] || 0) + 1; errs.add(det.error); if (failed[det.key] >= 2) done.add(det.key); continue; }
         done.add(det.key);
         const a = parseSkywardAssignments(det.html || '');
         if (!a.assignments.length) { unread.push(c.name); if (!detailsHtml && det.html) detailsHtml = det.html; }
@@ -1253,7 +1254,7 @@ async function finishDirect(j, login, quick) {
       todo = todo.filter(x => !done.has(x.key));
       if (todo.length === before && !d.details.some(det => det.error)) break;   // no progress
     }
-    if (errs.size) notes.push(`Skyward refused some assignment lists: ${[...errs].slice(0, 3).join(' / ')}`);
+    if (errs.size) notes.push(`Couldn't find the assignment list in what Skyward sent (${[...errs].slice(0, 3).join(' / ')})`);
     if (unread.length) notes.push(`Skyward sent the assignment list for ${unread.length === 1 ? unread[0] : unread.length + ' classes'}, but this page couldn't read any assignments in it.`);
     if (read < cells.length) notes.push(`Got assignments for ${read} of ${cells.length} classes.`);
   }

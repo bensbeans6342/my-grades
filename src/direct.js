@@ -305,6 +305,7 @@ export async function signInAndOpenGrades({ url, username, password, tenantCode 
 
 // ---------------------------------------------------------------- 4: assignments for some classes
 // cells: [{ key, postdata: {...fields from the grade cell...} }]
+const stringsIn = o => (typeof o === 'string' ? [o] : o && typeof o === 'object' ? Object.values(o).flatMap(stringsIn) : []);
 export async function fetchDetails({ session, cells, log = () => {}, fetchImpl }) {
   const s = new Session({ jar: new Jar(session.jar), log, fetchImpl });
   const sky = session.sky;
@@ -318,8 +319,17 @@ export async function fetchDetails({ session, cells, log = () => {}, fetchImpl }
       const form = {};
       for (const [k, v] of Object.entries(cell.postdata)) form[k] = typeof v === 'string' ? v : JSON.stringify(v);
       const det = await skywardXhr(s, sky, detUrl, form, { accept: 'text/plain' });
-      const cfg = browseConfigs(det.text, 'detailsPanel_SegmentedGradeBucketAssignments')[0];
-      if (!cfg) { out.push({ key: cell.key, error: 'no assignment list' }); continue; }
+      // The details pane can come back as plain HTML or wrapped in JSON (with its quotes escaped),
+      // so unwrap it before looking for the assignment list in it.
+      let pane = det.text;
+      if (/^\s*[{[]/.test(pane)) { try { pane = stringsIn(JSON.parse(pane)).join('\n'); } catch (e) {} }
+      const cfg = browseConfigs(pane, 'detailsPanel_SegmentedGradeBucketAssignments')[0]
+        || browseConfigs(pane, '').find(c => /assign/i.test(`${c.id} ${c.browseName || ''} ${c.dataObject || ''}`));
+      if (!cfg) {
+        // Some Skyward versions put the assignment rows right in the pane.
+        if (/_unlockedRow/.test(pane)) { out.push({ key: cell.key, html: pane }); continue; }
+        out.push({ key: cell.key, error: 'no assignment list', pane: pane.slice(0, 300000) }); continue;
+      }
       const r = await skywardXhr(s, sky, `${sky.base}/Gradebook/Assignment/GetBrowse?w=${sky.w}&p=${sky.p}`, getBrowseForm(cfg, { defaultHeader: '2' }));
       const j = JSON.parse(r.text);
       out.push({ key: cell.key, html: j.html || '' });
