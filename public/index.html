@@ -957,6 +957,12 @@ function showSync() {
 const LOGIN_KEY = 'mygrades.login';
 const loadLogin = () => { try { return JSON.parse(localStorage.getItem(LOGIN_KEY)) || {}; } catch (e) { return {}; } };
 const saveLogin = o => { try { localStorage.setItem(LOGIN_KEY, JSON.stringify(o)); } catch (e) {} };
+// Pre-fill district settings from the Worker (set as secrets in Cloudflare, not in the public code).
+const loadDefaults = () => fetch('api/defaults').then(r => (r.ok ? r.json() : {})).then(d => {
+  const s = loadLogin(); let changed = false;
+  for (const k of ['classlinkUrl', 'launchUrl', 'tenantCode', 'userDomain']) if (d && d[k] && !s[k]) { s[k] = d[k]; changed = true; }
+  if (changed) saveLogin(s);
+}).catch(() => {});
 let lastFailure = null, lastNotes = null;
 
 function showServerStatus() {
@@ -1391,6 +1397,7 @@ if (serverMode) {
   $('#hdrNote').textContent = 'Your grades are saved in this browser.';
   $('#pullBtn').hidden = false;
   $('#pullBtn').onclick = pullNow;
+  loadDefaults();
   $('#localSteps').innerHTML = '<li>Click <b>Pull from Skyward</b> at the top and sign in with your ClassLink login.</li><li>Your grades are saved in this browser. Pull again whenever you want fresh ones.</li>';
   $('#localNote').textContent = 'Pulls use plain requests and take a few seconds.';
   showServerStatus();

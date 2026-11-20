@@ -16,7 +16,7 @@ export default {
       if (origin && origin !== url.origin) return json({ ok: false, error: 'Not allowed.' }, 403);
       let body;
       try { body = await request.json(); } catch { return json({ ok: false, error: 'Bad request.' }, 400); }
-      return json(await doPull(env, body));
+      return json(await doPull(env, withDefaults(env, body)));
     }
     if (url.pathname === '/api/details') {
       if (request.method !== 'POST') return json({ ok: false, error: 'Use POST.' }, 405);
@@ -26,9 +26,24 @@ export default {
       try { body = await request.json(); } catch { return json({ ok: false, error: 'Bad request.' }, 400); }
       return json(await doDetails(body));
     }
+    if (url.pathname === '/api/defaults') return json(districtDefaults(env));
     return env.ASSETS.fetch(request);
   },
 };
+
+// Your district's sign-in settings, kept as Worker secrets in the Cloudflare dashboard (not in this
+// public code): CLASSLINK_URL, SKYWARD_LINK, CLASSLINK_CODE, USERNAME_DOMAIN. All optional.
+// They pre-fill the sign-in box and are used for any of those boxes left blank.
+function districtDefaults(env) {
+  const v = k => (typeof env[k] === 'string' ? env[k].trim() : '');
+  return { classlinkUrl: v('CLASSLINK_URL'), launchUrl: v('SKYWARD_LINK'), tenantCode: v('CLASSLINK_CODE'), userDomain: v('USERNAME_DOMAIN') };
+}
+function withDefaults(env, body) {
+  if (!body || typeof body !== 'object') return body;
+  const d = districtDefaults(env), out = { ...body };
+  for (const k of Object.keys(d)) if (!out[k] && d[k]) out[k] = d[k];
+  return out;
+}
 
 function checkInput(b) {
   const str = (v, max) => (typeof v === 'string' && v.length <= max ? v.trim() : null);

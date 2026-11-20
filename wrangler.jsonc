@@ -4,6 +4,8 @@
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  // Keep variables set in the Cloudflare dashboard when GitHub deploys a new version.
+  "keep_vars": true,
 
   // Cloudflare's hosted browser, used to sign in and read Skyward when you click "Pull from Skyward".
   "browser": { "binding": "BROWSER" },
