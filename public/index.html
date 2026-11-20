@@ -110,9 +110,11 @@ code.k{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;backgr
 /* Incognito: hide grades until clicked */
 body.incog .mask:not(.peek){position:relative;color:transparent!important;cursor:pointer;user-select:none}
 body.incog .mask:not(.peek) *{color:transparent!important}
-body.incog .mask:not(.peek)::after{content:attr(data-fake);position:absolute;inset:0;padding:inherit;display:flex;align-items:center;justify-content:flex-start;white-space:nowrap;overflow:hidden;color:var(--muted);filter:blur(4px);pointer-events:none}
-body.incog .mask.num:not(.peek)::after,body.incog .mask.pct:not(.peek)::after{justify-content:flex-end}
-body.incog .mask.pill:not(.peek)::after{justify-content:center}
+.fakeov{display:none}
+body.incog .mask:not(.peek)>.fakeov{display:block;position:absolute;inset:0;padding:inherit;margin:0;white-space:nowrap;overflow:hidden;filter:blur(4px);pointer-events:none}
+body.incog td.mask:not(.peek)>.fakeov{display:flex;align-items:center;justify-content:flex-end}
+body.incog .mask:not(.peek) .fakeov,body.incog .mask:not(.peek) .fakeov *{color:var(--muted)!important}
+body.incog .inhost:not(.peek)::after{content:attr(data-fake);position:absolute;inset:0;padding:inherit;display:flex;align-items:center;justify-content:flex-end;white-space:nowrap;overflow:hidden;color:var(--muted);filter:blur(4px);pointer-events:none}
 #incogBtn{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;color:var(--muted)}
 #incogBtn[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--card);font-weight:600}
 @media (max-width:640px){
@@ -1399,17 +1401,35 @@ const fakeNum = m => {
   const whole = i.length >= 2 ? String(55 + rnd(45)) : String(rnd(10));
   return d ? whole + '.' + Array.from(d, () => rnd(10)).join('') : whole;
 };
-const fakeText = t => t.replace(/\d+(?:\.\d+)?/g, fakeNum).replace(/\b[A-F][+-]?(?![a-z])/g, () => 'ABCD'[rnd(4)]);
+// Labels like PR1, Q2 or Period 3 keep their numbers; only grades are made up.
+const fakeText = t => t.replace(/(Period\s+)?(?<![A-Za-z])\d+(?:\.\d+)?/gi, (m, per) => per ? m : fakeNum(m)).replace(/\b[A-F][+-]?(?![a-z])/g, () => 'ABCD'[rnd(4)]);
 const realOf = new WeakMap();
+// Score boxes: the fake value is drawn over the box (CSS ::after).
 function setFake(el, real) {
   el.classList.add('mask');
   if (realOf.get(el) === real && el.hasAttribute('data-fake')) return;
   realOf.set(el, real);
   el.setAttribute('data-fake', fakeText(real));
 }
+// Everything else: a copy of the element with every number swapped is laid over the real one,
+// so spacing, sizes and labels match and only the values are made up.
+const ownText = el => Array.from(el.childNodes).filter(n => !(n.classList && n.classList.contains('fakeov'))).map(n => n.textContent).join('');
+function setOverlay(el) {
+  el.classList.add('mask');
+  const real = ownText(el), old = el.querySelector(':scope > .fakeov');
+  if (old && realOf.get(el) === real) return;
+  realOf.set(el, real);
+  if (old) old.remove();
+  const ov = document.createElement('span');
+  ov.className = 'fakeov'; ov.setAttribute('aria-hidden', 'true');
+  el.childNodes.forEach(n => ov.appendChild(n.cloneNode(true)));
+  const w = document.createTreeWalker(ov, NodeFilter.SHOW_TEXT);
+  for (let t = w.nextNode(); t; t = w.nextNode()) t.nodeValue = fakeText(t.nodeValue);
+  el.appendChild(ov);
+}
 function scanMasks() {
   if (!incogOn()) return;
-  document.querySelectorAll(MASKED).forEach(el => setFake(el, el.textContent));
+  document.querySelectorAll(MASKED).forEach(setOverlay);
   document.querySelectorAll(MASKED_INPUTS).forEach(inp => {
     const host = inp.parentElement; if (!host) return;
     host.classList.add('inhost');
@@ -1437,7 +1457,9 @@ document.addEventListener('click', e => {
     return;
   }
   e.preventDefault(); e.stopPropagation();
-  host.classList.toggle('peek');
+  // The current grade and its Skyward line show and hide together.
+  const show = !host.classList.contains('peek'), group = host.closest('.big');
+  (group ? group.querySelectorAll('.mask') : [host]).forEach(el => el.classList.toggle('peek', show));
 }, true);
 document.addEventListener('focusin', e => { const h = e.target.closest && e.target.closest('.inhost'); if (h && incogOn()) h.classList.add('peek'); });
 document.addEventListener('focusout', e => { const h = e.target.closest && e.target.closest('.inhost'); if (h) { h.classList.remove('peek'); scanMasks(); } });
