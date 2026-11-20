@@ -54,13 +54,12 @@ Your grades stay in that browser. To use another device, use **Backup & data** >
 ## How pulls work
 
 Pulls sign in with plain web requests, the same ones a browser sends: ClassLink → Plano ISD's
-sign-in (Network Login) → Skyward → Student Grades. A pull takes a few seconds and doesn't use
-Cloudflare's browser time. If that fast sign-in ever fails for a reason other than a wrong
-password (for example ClassLink or Skyward changed something), the pull automatically falls back
-to a real browser on Cloudflare (Browser Rendering, 10 free minutes a day), and the page says so.
+sign-in (Network Login) → Skyward → Student Grades. A pull takes a few seconds. If a step fails,
+the pull stops and the page shows the error and how far it got. There's no browser fallback.
 
-**Troubleshooting → Capture sign-in** records one sign-in (password, login, cookies and sign-in
-tokens removed) so a broken fast sign-in can be fixed.
+**Troubleshooting → Capture sign-in** records one sign-in with a browser on Cloudflare (password,
+login, cookies and sign-in tokens removed) so a broken sign-in can be fixed. It's the only thing
+that uses Cloudflare's browser time (10 free minutes a day).
 
 ## If a pull fails
 
