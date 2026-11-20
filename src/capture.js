@@ -5,7 +5,10 @@
 const SECRET_KEY = /pass|pwd|token|code|session|saml|ticket|auth|csrf|xsrf|secret|sig|nonce|state|key|cookie|jwt|bearer|otp|relay/i;
 const SECRET_HEADER = /^(cookie|set-cookie|authorization|proxy-authorization|x-csrf|csrf|x-xsrf|xsrf|x-auth|x-api-key|x-session)/i;
 const STATIC = /\.(png|jpe?g|gif|svg|ico|webp|woff2?|ttf|otf|eot|css|map|mp4|mp3)(\?|$)/i;
-const MAX_BODY = 20000, MAX_TOTAL = 3_000_000;
+const MAX_BODY = 20000, MAX_TOTAL = 6_000_000, MAX_PAGE = 900_000;
+// Pages/data saved in full (secrets removed): the district sign-in, ClassLink's hand-off, and Skyward.
+const FULL_HOST = /skyward|adfs|dirsync|idp\.classlink\.com|tenant-management-service/i;
+const JS_SECRET = /token|csrf|xsrf|sessionguidhash|password|secret|samlresponse|samlrequest/i;
 
 // secrets: { password, username }
 export function makeRedactor({ password, username }) {
@@ -43,18 +46,37 @@ export function makeRedactor({ password, username }) {
     return out;
   };
 
-  const json = (v, depth = 0, key = '') => {
+  const json = (v, depth = 0, key = '', full = false) => {
     if (v == null || typeof v === 'number' || typeof v === 'boolean') return v;
-    if (typeof v === 'string') { const r = redactValue(key, v); return r.length > 300 ? r.slice(0, 300) + '…' : r; }
+    if (typeof v === 'string') {
+      if (full) return (/<[a-z]/i.test(v) ? fullHtml(v) : redactValue(key, v)).slice(0, MAX_PAGE);
+      const r = redactValue(key, v); return r.length > 300 ? r.slice(0, 300) + '…' : r;
+    }
     if (depth > 12) return '[…]';
+    const cap = full ? 500 : 25;
     if (Array.isArray(v)) {
-      const a = v.slice(0, 25).map(x => json(x, depth + 1, key));
-      if (v.length > 25) a.push(`[…${v.length - 25} more]`);
+      const a = v.slice(0, cap).map(x => json(x, depth + 1, key, full));
+      if (v.length > cap) a.push(`[…${v.length - cap} more]`);
       return a;
     }
     const o = {};
-    for (const [k, x] of Object.entries(v)) o[text(k)] = json(x, depth + 1, k);
+    for (const [k, x] of Object.entries(v)) o[text(k)] = json(x, depth + 1, k, full);
     return o;
+  };
+
+  // A whole HTML page with secrets removed: password/login, values of secret-looking
+  // inputs and meta tags, secret-looking JavaScript values, and long sign-in blobs.
+  const fullHtml = s => {
+    let h = text(s);
+    h = h.replace(/<(input|meta)\b[^>]*>/gi, tag => {
+      const nm = (tag.match(/\b(?:name|id|type)\s*=\s*["']([^"']*)["']/gi) || []).join(' ');
+      if (!SECRET_KEY.test(nm) && !/type\s*=\s*["']password/i.test(tag)) return tag;
+      return tag.replace(/\b(value|content)\s*=\s*(["'])([^"']*)\2/gi, (m, a, q, v) => `${a}=${q}[REDACTED ${v.length} chars]${q}`);
+    });
+    h = h.replace(/(["']?)([\w.$-]*)\1\s*([:=])\s*(["'])([^"'\n]{6,})\4/g, (m, q, name, op, q2, v) =>
+      (JS_SECRET.test(name) ? `${q}${name}${q}${op}${q2}[REDACTED ${v.length} chars]${q2}` : m));
+    h = h.replace(/[A-Za-z0-9+/=_-]{160,}/g, m => `[REDACTED long ${m.length} chars]`);
+    return h;
   };
 
   const form = body => {
@@ -92,7 +114,7 @@ export function makeRedactor({ password, username }) {
     };
   };
 
-  return { text, url, headers, json, form, html };
+  return { text, url, headers, json, form, html, fullHtml };
 }
 
 export function startCapture(context, secrets) {
@@ -120,11 +142,14 @@ export function startCapture(context, secrets) {
       const isScript = entry.type === 'script' || ct.includes('javascript');
       if (!isStatic && !isScript && resp.status() < 300 && total < MAX_TOTAL) {
         const body = await resp.text().catch(() => null);
+        const full = FULL_HOST.test(u);
         if (body != null) {
           if (ct.includes('json') || /^\s*[[{]/.test(body)) {
-            try { entry.responseJson = R.json(JSON.parse(body)); } catch { entry.responseText = R.text(body).slice(0, MAX_BODY); }
-          } else if (ct.includes('html') || /^\s*</.test(body)) entry.responseHtml = R.html(body);
-          else entry.responseText = R.text(body).slice(0, 2000);
+            try { entry.responseJson = R.json(JSON.parse(body), 0, '', full); } catch { entry.responseText = R.text(body).slice(0, MAX_BODY); }
+          } else if (ct.includes('html') || /^\s*</.test(body)) {
+            entry.responseHtml = R.html(body);
+            if (full) entry.responseHtmlFull = R.fullHtml(body).slice(0, MAX_PAGE);
+          } else entry.responseText = R.text(body).slice(0, 2000);
         }
       }
       const size = JSON.stringify(entry).length;
@@ -133,12 +158,43 @@ export function startCapture(context, secrets) {
     } catch (e) { /* never let capture break the pull */ }
   };
   context.on('response', onResponse);
+
+  // Pages that submit themselves right away (sign-in hand-offs) are gone before their
+  // response can be read, so save them from inside the page just before they submit.
+  const pages = [];
+  const seen = new Set();
+  const savePage = (url, why, html) => {
+    try {
+      if (!FULL_HOST.test(url) || total > MAX_TOTAL) return;
+      const key = url + '|' + html.length;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const entry = { t: Date.now() - started, why, url: R.url(url), html: R.fullHtml(html).slice(0, MAX_PAGE) };
+      total += entry.html.length;
+      pages.push(entry);
+    } catch (e) {}
+  };
+  const ready = (async () => {
+    try {
+      await context.exposeBinding('__mgCapturePage', (source, url, why, html) => savePage(String(url), String(why), String(html)));
+      await context.addInitScript(() => {
+        const send = why => { try { window.__mgCapturePage(location.href, why, document.documentElement.outerHTML); } catch (e) {} };
+        const orig = HTMLFormElement.prototype.submit;
+        HTMLFormElement.prototype.submit = function () { send('form submitted'); return orig.apply(this, arguments); };
+        document.addEventListener('submit', () => send('form submitted'), true);
+        document.addEventListener('DOMContentLoaded', () => send('page loaded'));
+        window.addEventListener('load', () => setTimeout(() => send('page settled'), 1500));
+      });
+    } catch (e) { /* not supported: the network log still has most of it */ }
+  })();
+
   return {
+    ready,
     stop: async () => {
       context.off?.('response', onResponse);
       await new Promise(r => setTimeout(r, 300));
       // last safety pass: no raw password/username anywhere
-      return JSON.parse(R.text(JSON.stringify({ capturedAt: new Date().toISOString(), requests: log })));
+      return JSON.parse(R.text(JSON.stringify({ capturedAt: new Date().toISOString(), version: 2, requests: log, pages })));
     },
   };
 }

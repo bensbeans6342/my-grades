@@ -278,6 +278,7 @@ export async function pullGrades(browser, cfg) {
   pullGrades.lastContext = context;
   pullGrades.lastPage = null;
   pullGrades.capture = cfg.capture ? startCapture(context, { password: cfg.password, username: cfg.username }) : null;
+  if (pullGrades.capture) await pullGrades.capture.ready;
   await page.goto(cfg.url.includes('://') ? cfg.url : 'https://' + cfg.url);
   log('Opened ClassLink');
   await signIn(context, cfg.username, cfg.password, log, cfg.gradesUrl);
