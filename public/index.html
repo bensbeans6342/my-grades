@@ -440,7 +440,7 @@ function refreshGPA() {
       const cell = tr.querySelector(`[data-gsem="${si}"]`), pts = tr.querySelector(`[data-gpts="${si}"]`);
       if (!cell) return;
       if (!g) { cell.textContent = '—'; cell.className = 'num pct'; pts.textContent = '—'; return; }
-      cell.innerHTML = `${Math.round(g.avg)}${g.complete ? '' : ' <span class="muted small" style="font-weight:400">so far</span>'}`;
+      cell.innerHTML = `${g.avg.toFixed(2)}${g.complete ? '' : ' <span class="muted small" style="font-weight:400">so far</span>'}`;
       cell.className = 'num pct ' + tone(g.avg);
       pts.textContent = lv ? gpaPoints(g.avg, lv).toFixed(1) : '—';
     });
@@ -457,7 +457,7 @@ function renderSidebar() {
   const gpaLi = state.classes.length ? `<li data-id="${GPA_ID}" class="${currentId === GPA_ID ? 'active' : ''}"><span class="nm"><b>GPA calculator</b></span><span class="pill">${gs && gs.overall != null ? gs.overall.toFixed(2) : '—'}</span></li>` : '';
   ul.innerHTML = gpaLi + (state.classes.length ? state.classes.map(c => {
     const p = shownPct(c);
-    return `<li data-id="${c.id}" class="${c.id === currentId ? 'active' : ''}"><span class="nm">${esc(c.name)}</span><span class="pill ${tone(p)}">${p == null ? '—' : p.toFixed(1)}</span></li>`;
+    return `<li data-id="${c.id}" class="${c.id === currentId ? 'active' : ''}"><span class="nm">${esc(c.name)}</span><span class="pill ${tone(p)}">${p == null ? '—' : p.toFixed(2)}</span></li>`;
   }).join('') : '<li class="empty">No classes yet</li>');
 }
 function renderScale() {
