@@ -114,12 +114,13 @@ input.gchanged{color:var(--wi);font-weight:700}
 .skyline{font-size:13px;color:var(--muted);margin-top:2px}
 code.k{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:0 4px}
 /* Incognito: hide grades until clicked */
-body.incog .mask:not(.peek){position:relative;color:transparent!important;cursor:pointer;user-select:none}
-body.incog .mask:not(.peek) *{color:transparent!important}
+body.incog .mask:not(.peek){cursor:pointer;user-select:none}
 .fakeov{display:none}
-body.incog .mask:not(.peek)>.fakeov{display:block;position:absolute;inset:0;padding:inherit;margin:0;white-space:nowrap;overflow:hidden;filter:blur(4px);pointer-events:none}
-body.incog td.mask:not(.peek)>.fakeov{display:flex;align-items:center;justify-content:flex-end}
+body.incog .mask:not(.peek)>.realwrap{display:none}
+body.incog .mask:not(.peek)>.fakeov{display:inline-block;filter:blur(4px);pointer-events:none;white-space:nowrap}
 body.incog .mask:not(.peek) .fakeov,body.incog .mask:not(.peek) .fakeov *{color:var(--muted)!important}
+body.incog .inhost:not(.peek){position:relative}
+body.incog .inhost:not(.peek) input{color:transparent!important}
 body.incog .inhost:not(.peek)::after{content:attr(data-fake);position:absolute;inset:0;padding:inherit;display:flex;align-items:center;justify-content:flex-end;white-space:nowrap;overflow:hidden;color:var(--muted);filter:blur(4px);pointer-events:none}
 #incogBtn{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;color:var(--muted)}
 #incogBtn[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--card);font-weight:600}
@@ -1430,7 +1431,7 @@ const incogOn = () => document.body.classList.contains('incog');
 const rnd = n => Math.floor(Math.random() * n);
 const fakeNum = m => {
   const [i, d] = m.split('.');
-  const whole = i.length >= 2 ? String(55 + rnd(45)) : String(rnd(10));
+  const whole = String(55 + rnd(45));   // always two digits, whatever the real number's length
   return d ? whole + '.' + Array.from(d, () => rnd(10)).join('') : whole;
 };
 // Labels like PR1, Q2 or Period 3 keep their numbers; only grades are made up.
@@ -1443,18 +1444,23 @@ function setFake(el, real) {
   realOf.set(el, real);
   el.setAttribute('data-fake', fakeText(real));
 }
-// Everything else: a copy of the element with every number swapped is laid over the real one,
-// so spacing, sizes and labels match and only the values are made up.
-const ownText = el => Array.from(el.childNodes).filter(n => !(n.classList && n.classList.contains('fakeov'))).map(n => n.textContent).join('');
+// Everything else: the real content is tucked into a hidden wrapper and a copy with every number
+// swapped takes its place, so the box is sized by the fake value and its width gives nothing away.
 function setOverlay(el) {
   el.classList.add('mask');
-  const real = ownText(el), old = el.querySelector(':scope > .fakeov');
-  if (old && realOf.get(el) === real) return;
+  let wrap = el.querySelector(':scope > .realwrap'), ov = el.querySelector(':scope > .fakeov');
+  const loose = Array.from(el.childNodes).filter(n => n !== wrap && n !== ov);
+  if (!wrap || loose.length) {
+    if (!wrap) { wrap = document.createElement('span'); wrap.className = 'realwrap'; el.insertBefore(wrap, el.firstChild); }
+    loose.forEach(n => wrap.appendChild(n));
+  }
+  const real = wrap.textContent;
+  if (ov && realOf.get(el) === real) return;
   realOf.set(el, real);
-  if (old) old.remove();
-  const ov = document.createElement('span');
+  if (ov) ov.remove();
+  ov = document.createElement('span');
   ov.className = 'fakeov'; ov.setAttribute('aria-hidden', 'true');
-  el.childNodes.forEach(n => ov.appendChild(n.cloneNode(true)));
+  wrap.childNodes.forEach(n => ov.appendChild(n.cloneNode(true)));
   const w = document.createTreeWalker(ov, NodeFilter.SHOW_TEXT);
   for (let t = w.nextNode(); t; t = w.nextNode()) t.nodeValue = fakeText(t.nodeValue);
   el.appendChild(ov);
