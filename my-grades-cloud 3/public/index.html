@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>My Grades</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#16181d;--muted:#667085;--line:#e3e6eb;--accent:#2f6fed;--accent-ink:#fff;--chip:#eef2ff;--good:#12805c;--ok:#16181d;--warn:#b54708;--bad:#c4320a;--wi:#6e4ff6;--wi-bg:#f4f1ff}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1014;--card:#161920;--ink:#e8eaf0;--muted:#98a2b3;--line:#282d38;--accent:#5b8cff;--accent-ink:#0e1014;--chip:#1d2331;--good:#32d583;--ok:#e8eaf0;--warn:#fdb022;--bad:#f97066;--wi:#a492ff;--wi-bg:#1d1a2e}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
+header h1{font-size:18px;margin:0;font-weight:650;letter-spacing:-.01em}
+header .note{color:var(--muted);font-size:13px}
+.layout{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:calc(100vh - 54px)}
+aside{border-right:1px solid var(--line);padding:16px;background:var(--card)}
+main{padding:20px 24px 60px;max-width:1080px;width:100%}
+@media (max-width:820px){.layout{grid-template-columns:minmax(0,1fr)}aside{border-right:0;border-bottom:1px solid var(--line)}main{padding:16px}}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600}
+h3{font-size:16px;margin:0 0 10px}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 12px;border-radius:8px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--muted)}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.ghost{border-color:transparent;background:transparent;color:var(--muted);padding:4px 8px}
+button.ghost:hover{color:var(--ink);border-color:var(--line)}
+button.danger{color:var(--bad)}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 9px;min-width:0}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+textarea{width:100%;min-height:150px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;resize:vertical}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:16px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.classlist{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:4px}
+.classlist li{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+.classlist li:hover{background:var(--bg)}
+.classlist li.active{background:var(--chip);border-color:var(--line)}
+.classlist li.empty{cursor:default;color:var(--muted)}
+.classlist .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{font-variant-numeric:tabular-nums;font-weight:650;font-size:13px;padding:1px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--line)}
+.good{color:var(--good)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+aside details{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+aside summary{cursor:pointer;font-weight:600;font-size:14px}
+.scale-row{display:grid;grid-template-columns:60px 1fr auto;gap:6px;margin-top:6px;align-items:center}
+.titlerow{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+.titlerow input.title{flex:1;font-size:22px;font-weight:650;background:transparent;border-color:transparent;padding:4px 6px;margin-left:-6px}
+.titlerow input.title:hover{border-color:var(--line)}
+.summary{display:flex;gap:28px;align-items:flex-end;flex-wrap:wrap}
+.big .lbl{font-size:13px;color:var(--muted)}
+.big .num{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.15}
+.big .num .letter{font-size:22px;margin-left:6px;color:var(--muted);font-weight:650}
+.big.wi .lbl{color:var(--wi)}
+.diff{font-size:14px;font-weight:600;margin-left:8px}
+.controls{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.switch{display:inline-flex;gap:8px;align-items:center;cursor:pointer;user-select:none;font-weight:600;color:var(--wi)}
+.switch input{width:16px;height:16px;accent-color:var(--wi)}
+body.wimode .assign-card{border-color:var(--wi);background:linear-gradient(var(--wi-bg),var(--wi-bg))}
+.banner{display:none;color:var(--wi);font-size:13px;margin:-4px 0 10px}
+body.wimode .banner{display:block}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:6px;border-bottom:1px solid var(--line)}
+td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td input{width:100%;background:transparent;border-color:transparent}
+td input:hover{border-color:var(--line)}
+td select{width:100%}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.num input{text-align:right}
+td.pct{width:70px;font-weight:600}
+td.acts{white-space:nowrap;width:1%;text-align:right}
+col.c-score,col.c-max{width:84px}
+col.c-cat{width:170px}
+tr.excl td:not(.acts){opacity:.45;text-decoration:line-through}
+tr.changed td input[data-af=score]{color:var(--wi);font-weight:700}
+tr.hypo td{background:var(--wi-bg)}
+.tag{display:inline-block;font-size:11px;font-weight:700;color:var(--wi);border:1px solid var(--wi);border-radius:999px;padding:0 6px;margin-left:4px;vertical-align:middle}
+.addrow td{padding-top:10px;border-bottom:0}
+.addrow input{background:var(--bg);border-color:var(--line)}
+.warnline{color:var(--warn);font-size:13px;margin-top:8px}
+.result{margin-top:10px;font-size:15px}
+.result b{font-variant-numeric:tabular-nums}
+.empty-state{text-align:center;padding:48px 20px}
+.empty-state p{max-width:520px;margin:8px auto 18px;color:var(--muted)}
+.steps{margin:6px 0 12px;padding-left:20px;color:var(--muted);font-size:14px}
+.preview{max-height:320px;overflow:auto;margin-top:10px;border:1px solid var(--line);border-radius:10px}
+.preview td,.preview th{padding:5px 8px}
+details.card>summary{cursor:pointer;font-weight:650;font-size:16px}
+details.card[open]>summary{margin-bottom:10px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;align-items:end}
+.grid2 label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.sync{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 20px;background:var(--chip);border-bottom:1px solid var(--line);font-size:14px}
+.sync[hidden]{display:none}
+.gpatable td,.gpatable th{padding:6px}
+.gpatable td input{width:70px}
+.gpatable select{max-width:190px}
+input.gchanged{color:var(--wi);font-weight:700}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:60px 16px;z-index:20;overflow:auto}
+.signin{width:100%;max-width:440px}
+.signin label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);margin-bottom:10px}
+.signin label.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:14px;margin-top:6px}
+.signin details{margin:4px 0 10px}
+.signin summary{cursor:pointer;color:var(--muted);margin-bottom:8px}
+.skyline{font-size:13px;color:var(--muted);margin-top:2px}
+code.k{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:0 4px}
+@media (max-width:640px){
+  header .note{display:none}
+  .card{overflow-x:auto;padding:14px}
+  .card table{min-width:600px}
+  .preview table{min-width:0}
+  .controls{margin-left:0}
+  .big .num{font-size:28px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>My Grades</h1>
+  <span class="note" id="hdrNote">Runs in your browser. No server. Your data stays on this device.</span>
+  <span style="flex:1"></span>
+  <span class="small muted" id="pullMsg"></span>
+  <button class="primary" id="pullBtn" hidden>Pull from Skyward</button>
+</header>
+<div class="sync" id="syncBanner" hidden></div>
+<div class="layout">
+  <aside>
+    <h2>Classes</h2>
+    <ul class="classlist" id="classlist"></ul>
+    <div class="row">
+      <input id="newClass" placeholder="New class name" style="flex:1">
+      <button class="primary" id="addClass">Add</button>
+    </div>
+
+    <details id="skyHelp">
+      <summary>Update from Skyward</summary>
+      <p class="small muted" id="lastPulled">Not pulled from Skyward yet.</p>
+      <div id="pullStatus" class="small"></div>
+      <ol class="steps small" id="localSteps">
+        <li>In this folder, double-click <b>Update grades (Windows).bat</b> or <b>Update grades (Mac).command</b>.</li>
+        <li>Enter your ClassLink username and password when it asks. A browser window signs in and reads your grades.</li>
+        <li>Refresh this page.</li>
+      </ol>
+      <p class="small muted" id="localNote">Needs Python 3 on your computer. See README.txt.</p>
+    </details>
+
+    <details>
+      <summary>Grading scale</summary>
+      <div id="scale"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="addGrade">+ Add letter</button>
+        <button class="ghost" id="resetScale">Reset to A/B/C/D/F</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>Backup &amp; data</summary>
+      <p class="small muted">Grades are saved in this browser. Export a backup file to move them to another device.</p>
+      <div class="row">
+        <button id="exportBtn">Export backup</button>
+        <button id="importBtn">Import backup</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="danger" id="eraseBtn">Erase everything</button>
+      </div>
+    </details>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<script src="grades-data.js"></script>
+<script>
+(() => {
+'use strict';
+const KEY = 'mygrades.v1';
+const DEFAULT_SCALE = [{l:'A',min:90},{l:'B',min:80},{l:'C',min:70},{l:'D',min:60},{l:'F',min:0}];
+const uid = () => Math.random().toString(36).slice(2, 10);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const num = v => { if (v == null) return null; const s = String(v).trim().replace(/%$/, ''); if (s === '') return null; const n = Number(s); return Number.isFinite(n) ? n : null; };
+const fmt = p => p == null ? '—' : p.toFixed(2) + '%';
+
+// ---------- state ----------
+let state = load();
+let currentId = state.classes[0]?.id ?? null;
+let whatIf = false;
+let pending = null; // parsed import preview
+let eraseArmed = false;
+
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && Array.isArray(s.classes)) return normalize(s);
+  } catch (e) {}
+  return { classes: [], scale: DEFAULT_SCALE.map(x => ({...x})) };
+}
+function normalize(s) {
+  if (!Array.isArray(s.scale) || !s.scale.length) s.scale = DEFAULT_SCALE.map(x => ({...x}));
+  s.classes.forEach(c => {
+    c.id = c.id || uid();
+    c.name = c.name || 'Class';
+    c.mode = c.mode === 'points' ? 'points' : 'weighted';
+    c.categories = Array.isArray(c.categories) ? c.categories : [];
+    c.assignments = Array.isArray(c.assignments) ? c.assignments : [];
+    c.assignments.forEach(a => { a.id = a.id || uid(); });
+    // District rule: in each grading period, Major = 60%, Daily/Minor = 40%.
+    c.categories.forEach(k => {
+      if (num(k.weight) == null) { if (/major/i.test(k.name)) k.weight = 60; else if (/minor|daily/i.test(k.name)) k.weight = 40; }
+    });
+    if (c.categories.length && c.categories.every(k => num(k.weight) > 0)) c.mode = 'weighted';
+  });
+  return s;
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+const cur = () => state.classes.find(c => c.id === currentId) || null;
+
+// ---------- grade math ----------
+function eff(a, proj) {
+  if (a.excluded) return null;
+  if (!proj) return a.hypo ? null : a.score;
+  return a.wi != null ? a.wi : a.score;
+}
+function usesCats(c) { return c.mode === 'weighted' && c.categories.length > 0; }
+function calc(c, proj) {
+  const items = c.assignments.filter(a => a.max > 0 && eff(a, proj) != null);
+  if (!usesCats(c)) {
+    let S = 0, M = 0;
+    items.forEach(a => { S += eff(a, proj); M += a.max; });
+    return { pct: M ? S / M * 100 : null, cats: {}, S, M };
+  }
+  const cats = {};
+  c.categories.forEach(k => cats[k.id] = { S: 0, M: 0, w: num(k.weight) || 0, pct: null });
+  items.forEach(a => { const k = cats[a.cat]; if (k) { k.S += eff(a, proj); k.M += a.max; } });
+  let tot = 0, W = 0;
+  for (const id in cats) {
+    const k = cats[id];
+    k.pct = k.M ? k.S / k.M * 100 : null;
+    if (k.M && k.w > 0) { tot += k.w * k.pct; W += k.w; }
+  }
+  return { pct: W ? tot / W : null, cats };
+}
+// Score needed on a new assignment worth N points (in category catId) for overall = target
+function needed(c, catId, N, target) {
+  const r = calc(c, true);
+  if (!usesCats(c)) return target / 100 * (r.M + N) - r.S;
+  const kc = r.cats[catId];
+  if (!kc || kc.w <= 0) return null;
+  let other = 0, W = kc.w;
+  for (const id in r.cats) {
+    if (id === catId) continue;
+    const k = r.cats[id];
+    if (k.M && k.w > 0) { other += k.w * k.pct; W += k.w; }
+  }
+  return (target * W - other) * (kc.M + N) / (kc.w * 100) - kc.S;
+}
+function sortedScale() { return [...state.scale].filter(g => g.l !== '' && num(g.min) != null).sort((a, b) => num(b.min) - num(a.min)); }
+function letter(p) {
+  if (p == null) return '';
+  const sc = sortedScale();
+  for (const g of sc) if (p >= num(g.min)) return g.l;
+  return sc[sc.length - 1]?.l || '';
+}
+function tone(p) {
+  if (p == null) return '';
+  const sc = sortedScale(), n = sc.length;
+  let i = sc.findIndex(g => p >= num(g.min)); if (i < 0) i = n - 1;
+  if (i === 0) return 'good';
+  if (n >= 4 && i >= n - 2) return 'bad';
+  if (i >= 2) return 'warn';
+  return 'ok';
+}
+const skyNum = c => { const m = String(c.skywardGrade ?? '').match(/^\d+(?:\.\d+)?/); return m ? +m[0] : null; };
+const shownPct = c => calc(c, false).pct ?? skyNum(c);
+const gradeHTML = p => `<span class="${tone(p)}">${fmt(p)}</span><span class="letter">${esc(letter(p))}</span>`;
+
+// ---------- Skyward paste parser ----------
+function parsePaste(text, c) {
+  const out = [], newCats = [];
+  let curCat = null;
+  const known = new Map(c.categories.map(k => [k.name.trim().toLowerCase(), k.name]));
+  const isJunk = f => /^[A-F][+-]?$/i.test(f) || /^-?\d+(\.\d+)?%?$/.test(f) || /^\d{1,2}\/\d{1,2}$/.test(f) || /^(\*|-|—)$/.test(f) || /^(due|assigned|score|points|grade|assignment|category)s?$/i.test(f);
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/ /g, ' ').trim();
+    if (!line) continue;
+    // Category header, e.g. "TESTS weighted at 40.00%"
+    const wm = line.match(/^(.*?)\s*[(\-–:]?\s*weighted at\s*(\d+(?:\.\d+)?)\s*%/i);
+    if (wm) {
+      const name = wm[1].split(/\t|\s{2,}/).map(s => s.trim()).filter(Boolean)[0] || 'Category';
+      curCat = { name: titleCase(name), weight: +wm[2] };
+      if (!newCats.some(k => k.name.toLowerCase() === curCat.name.toLowerCase())) newCats.push(curCat);
+      continue;
+    }
+    const t = line.replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, ' '); // strip full dates
+    const m = t.match(/(-?\d+(?:\.\d+)?)\s*out of\s*(\d+(?:\.\d+)?)/i) || t.match(/(-?\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+    if (!m) continue;
+    const score = +m[1], max = +m[2];
+    if (!(max > 0)) continue;
+    const before = t.slice(0, m.index), after = t.slice(m.index + m[0].length);
+    const fields = (before + '\t' + after).split(/\t|\s{2,}/).map(s => s.trim()).filter(Boolean);
+    let cat = null;
+    const nameFields = [];
+    for (const f of fields) {
+      const kn = known.get(f.toLowerCase()) || newCats.find(k => k.name.toLowerCase() === f.toLowerCase())?.name;
+      if (kn && !cat) { cat = kn; continue; }
+      if (!isJunk(f)) nameFields.push(f);
+    }
+    const beforeNames = before.split(/\t|\s{2,}/).map(s => s.trim()).filter(f => f && !isJunk(f) && f !== cat);
+    let name = (beforeNames.sort((a, b) => b.length - a.length)[0]) || nameFields.sort((a, b) => b.length - a.length)[0] || 'Assignment';
+    name = name.replace(/\s+(?:[A-F][+-]?|\d+(?:\.\d+)?%?)$/i, '').trim() || name;
+    out.push({ name, score, max, catName: cat || curCat?.name || null, keep: true });
+  }
+  return { items: out, newCats };
+}
+function titleCase(s) { return s === s.toUpperCase() ? s.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : s; }
+
+// ---------- GPA ----------
+const GPA_ID = '__gpa';
+// Semester grade = Period 1 x 40% + Period 2 x 40% + Semester exam x 20%
+const SEMS = [
+  { name: 'Semester 1', parts: [['NW1', 'Period 1', 0.4], ['NW2', 'Period 2', 0.4], ['SE1', 'Exam', 0.2]], sky: 'S1' },
+  { name: 'Semester 2', parts: [['NW3', 'Period 1', 0.4], ['NW4', 'Period 2', 0.4], ['SE2', 'Exam', 0.2]], sky: 'S2' },
+];
+// [lowest grade, Level 3 Distinguished, Level 2 Honors, Level 1]
+const GPA_TABLE = [[97, 5.0, 4.5, 4.0], [93, 4.8, 4.3, 3.8], [90, 4.6, 4.1, 3.6], [87, 4.4, 3.9, 3.4], [83, 4.2, 3.7, 3.2],
+                   [80, 4.0, 3.5, 3.0], [77, 3.8, 3.3, 2.8], [73, 3.6, 3.1, 2.6], [71, 3.4, 2.9, 2.4], [70, 3.0, 2.5, 2.0]];
+const LEVELS = { 3: '3 · Distinguished', 2: '2 · Honors', 1: '1 · Regular', 0: 'Not counted' };
+function guessLevel(name) {
+  if (/\b(AP|IB)\b/i.test(name)) return 3;
+  if (/\b(GT|HONORS?|PRE-?AP|ADV(ANCED)?|H)\b/i.test(name)) return 2;
+  if (/\b(ADVISORY|STUDY HALL|ATHLETICS?|AIDE)\b/i.test(name)) return 0;
+  return 1;
+}
+const levelOf = c => (c.gpa && c.gpa.level != null ? c.gpa.level : guessLevel(c.name));
+function gpaPoints(grade, level) {
+  if (grade == null || !level) return null;
+  const g = Math.round(grade);
+  for (const row of GPA_TABLE) if (g >= row[0]) return row[4 - level];
+  return 0;
+}
+// A period/exam grade: your override, else the class's calculated grade for its current term, else Skyward's.
+function defaultTerm(c, label) {
+  if (c.term === label) { const p = calc(c, true).pct; if (p != null) return Math.round(p * 100) / 100; }
+  const t = (c.termGrades || []).find(x => x.label === label);
+  return t ? num(t.grade) : null;
+}
+function termVal(c, label) {
+  const ov = c.gpa && c.gpa.ov ? c.gpa.ov[label] : undefined;
+  if (ov !== undefined) return ov === '' ? null : num(ov);
+  return defaultTerm(c, label);
+}
+function semGrade(c, sem) {
+  let tot = 0, w = 0, have = 0;
+  for (const [label, , wt] of sem.parts) { const v = termVal(c, label); if (v != null) { tot += v * wt; w += wt; have++; } }
+  return w ? { avg: tot / w, complete: have === sem.parts.length } : null;
+}
+function gpaSummary() {
+  const per = SEMS.map(() => ({ pts: 0, n: 0 }));
+  state.classes.forEach(c => {
+    const lv = levelOf(c); if (!lv) return;
+    SEMS.forEach((sem, i) => { const g = semGrade(c, sem); if (g) { per[i].pts += gpaPoints(g.avg, lv); per[i].n++; } });
+  });
+  const all = per.reduce((a, x) => ({ pts: a.pts + x.pts, n: a.n + x.n }), { pts: 0, n: 0 });
+  const avg = x => (x.n ? x.pts / x.n : null);
+  return { sems: per.map(avg), counts: per.map(x => x.n), overall: avg(all) };
+}
+const fmtGpa = g => (g == null ? '—' : g.toFixed(2));
+
+function renderGPA() {
+  const m = $('#main');
+  const classes = state.classes;
+  const semTable = (sem, si) => `
+  <section class="card">
+    <h3>${sem.name} <span class="muted small" id="gpaSem${si}"></span></h3>
+    <table class="gpatable">
+      <thead><tr><th>Class</th><th>GPA level</th>${sem.parts.map(([l, n]) => `<th class="num">${n}<br><span class="muted">${l}</span></th>`).join('')}<th class="num">Semester</th><th class="num">GPA pts</th></tr></thead>
+      <tbody>${classes.map(c => `<tr data-gcid="${c.id}">
+        <td>${esc(c.name)}</td>
+        <td><select data-glevel aria-label="Level">${[3, 2, 1, 0].map(v => `<option value="${v}" ${levelOf(c) === v ? 'selected' : ''}>${LEVELS[v]}</option>`).join('')}</select></td>
+        ${sem.parts.map(([l]) => {
+          const ov = c.gpa && c.gpa.ov && c.gpa.ov[l] !== undefined;
+          const d = defaultTerm(c, l);
+          return `<td class="num"><input data-gterm="${l}" inputmode="decimal" class="${ov ? 'gchanged' : ''}" value="${esc(ov ? c.gpa.ov[l] : (d ?? ''))}" placeholder="—" aria-label="${esc(c.name)} ${l}"></td>`;
+        }).join('')}
+        <td class="num pct" data-gsem="${si}"></td><td class="num pct" data-gpts="${si}"></td>
+      </tr>`).join('') || '<tr><td colspan="7" class="muted small">No classes yet. Pull from Skyward or add a class.</td></tr>'}</tbody>
+    </table>
+  </section>`;
+  m.innerHTML = `
+  <div class="titlerow"><input class="title" value="GPA calculator" readonly tabindex="-1" aria-label="GPA calculator"><button class="ghost" data-act="gpaReset" id="gpaReset">Reset to Skyward grades</button></div>
+  <section class="card summary">
+    <div class="big"><div class="lbl">Semester 1 GPA</div><div class="num" id="gpaS0"></div></div>
+    <div class="big"><div class="lbl">Semester 2 GPA</div><div class="num" id="gpaS1"></div></div>
+    <div class="big"><div class="lbl">Overall (all semesters so far)</div><div class="num" id="gpaAll"></div></div>
+  </section>
+  <p class="small muted" style="margin:-6px 2px 14px">Grades are filled in from Skyward (and from this page's calculated grade for the current period, including what-if scores). Change any of them to see what happens. Changed ones are purple.</p>
+  ${SEMS.map(semTable).join('')}
+  <details class="card">
+    <summary>How it's calculated</summary>
+    <ul class="small" style="line-height:1.7">
+      <li>GPA is calculated by semester. Each semester has two grading periods and one semester exam.</li>
+      <li>In each grading period: <b>Major = 60%</b>, <b>Daily/Minor = 40%</b>.</li>
+      <li>Semester grade: <b>Period 1 = 40%</b>, <b>Period 2 = 40%</b>, <b>Semester exam = 20%</b>. Before the exam, it's the average of the periods so far ("so far").</li>
+      <li>Each semester grade is rounded to a whole number and looked up below. GPA is the average of the points for every class and semester that counts.</li>
+      <li>Levels are guessed from class names (AP/IB = Level 3, GT/Honors/Pre-AP = Level 2, Advisory doesn't count). Change any that are wrong.</li>
+    </ul>
+    <table class="gpatable small">
+      <thead><tr><th>Numerical grade</th><th class="num">Level 3 Distinguished</th><th class="num">Level 2 Honors</th><th class="num">Level 1</th></tr></thead>
+      <tbody>${GPA_TABLE.map((r, i) => `<tr><td>${i === 0 ? '97 and above' : r[0] === 70 ? '70' : `${r[0]}–${GPA_TABLE[i - 1][0] - 1}`}</td><td class="num">${r[1].toFixed(1)}</td><td class="num">${r[2].toFixed(1)}</td><td class="num">${r[3].toFixed(1)}</td></tr>`).join('')}
+        <tr><td>Below 70</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr></tbody>
+    </table>
+  </details>`;
+  refreshGPA();
+}
+function refreshGPA() {
+  renderSidebar();
+  if (currentId !== GPA_ID) return;
+  const sum = gpaSummary();
+  $('#gpaS0').textContent = fmtGpa(sum.sems[0]);
+  $('#gpaS1').textContent = fmtGpa(sum.sems[1]);
+  $('#gpaAll').textContent = fmtGpa(sum.overall);
+  SEMS.forEach((sem, si) => {
+    const lab = $('#gpaSem' + si);
+    if (lab) lab.textContent = sum.counts[si] ? `· GPA ${fmtGpa(sum.sems[si])} from ${sum.counts[si]} class${sum.counts[si] === 1 ? '' : 'es'}` : '';
+  });
+  document.querySelectorAll('tr[data-gcid]').forEach(tr => {
+    const c = state.classes.find(x => x.id === tr.dataset.gcid); if (!c) return;
+    const lv = levelOf(c);
+    SEMS.forEach((sem, si) => {
+      const g = semGrade(c, sem);
+      const cell = tr.querySelector(`[data-gsem="${si}"]`), pts = tr.querySelector(`[data-gpts="${si}"]`);
+      if (!cell) return;
+      if (!g) { cell.textContent = '—'; cell.className = 'num pct'; pts.textContent = '—'; return; }
+      cell.innerHTML = `${Math.round(g.avg)}${g.complete ? '' : ' <span class="muted small" style="font-weight:400">so far</span>'}`;
+      cell.className = 'num pct ' + tone(g.avg);
+      pts.textContent = lv ? gpaPoints(g.avg, lv).toFixed(1) : '—';
+    });
+    tr.classList.toggle('excl', !lv);
+  });
+  const anyOv = state.classes.some(c => c.gpa && c.gpa.ov && Object.keys(c.gpa.ov).length);
+  const rb = $('#gpaReset'); if (rb) rb.disabled = !anyOv;
+}
+
+// ---------- rendering ----------
+function renderSidebar() {
+  const ul = $('#classlist');
+  const gs = state.classes.length ? gpaSummary() : null;
+  const gpaLi = state.classes.length ? `<li data-id="${GPA_ID}" class="${currentId === GPA_ID ? 'active' : ''}"><span class="nm"><b>GPA calculator</b></span><span class="pill">${gs && gs.overall != null ? gs.overall.toFixed(2) : '—'}</span></li>` : '';
+  ul.innerHTML = gpaLi + (state.classes.length ? state.classes.map(c => {
+    const p = shownPct(c);
+    return `<li data-id="${c.id}" class="${c.id === currentId ? 'active' : ''}"><span class="nm">${esc(c.name)}</span><span class="pill ${tone(p)}">${p == null ? '—' : p.toFixed(1)}</span></li>`;
+  }).join('') : '<li class="empty">No classes yet</li>');
+}
+function renderScale() {
+  $('#scale').innerHTML = state.scale.map((g, i) => `
+    <div class="scale-row" data-gi="${i}">
+      <input data-g="l" value="${esc(g.l)}" aria-label="Letter">
+      <input data-g="min" value="${esc(g.min)}" inputmode="decimal" aria-label="Minimum percent" placeholder="min %">
+      <button class="ghost danger" data-gdel="${i}" title="Remove">✕</button>
+    </div>`).join('');
+}
+
+function skywardLine(c) {
+  const parts = [];
+  if (Array.isArray(c.termGrades) && c.termGrades.length) {
+    parts.push('Skyward: ' + c.termGrades.map(t => t.label === c.term ? `<b>${esc(t.label)} ${esc(t.grade)}</b>` : `${esc(t.label)} ${esc(t.grade)}`).join(' · '));
+  } else if (c.skywardGrade) parts.push(`Skyward shows ${esc(c.skywardGrade)}${c.term ? ` (${esc(c.term)})` : ''}`);
+  if (c.missing) parts.push(`<span class="bad">${c.missing} missing assignment${c.missing === 1 ? '' : 's'}</span>`);
+  if (c.period) parts.push(esc(c.period));
+  return parts.length ? `<div class="skyline">${parts.join(' · ')}</div>` : '';
+}
+
+function renderMain() {
+  document.body.classList.toggle('wimode', whatIf && currentId !== GPA_ID);
+  if (currentId === GPA_ID) return renderGPA();
+  const m = $('#main'), c = cur();
+  if (!c) {
+    m.innerHTML = `<div class="card empty-state">
+      <h3>Add your first class</h3>
+      <p>Type a class name on the left, then paste your assignments from Skyward or type them in. You'll see your real grade, try what-if scores, and work out what you need on the next assignment.</p>
+      <button data-act="sample">Load a sample class to try it</button>
+    </div>`;
+    return;
+  }
+  const cats = usesCats(c);
+  const catOpts = sel => c.categories.map(k => `<option value="${k.id}" ${k.id === sel ? 'selected' : ''}>${esc(k.name)}</option>`).join('');
+  const shown = c.assignments.filter(a => whatIf || !a.hypo);
+  const rows = shown.map(a => {
+    const val = whatIf && !a.hypo ? (a.wi != null ? a.wi : (a.score ?? '')) : (a.score ?? '');
+    return `<tr data-aid="${a.id}" class="${a.hypo ? 'hypo' : ''} ${a.excluded ? 'excl' : ''} ${whatIf && (a.hypo || a.wi != null) ? 'changed' : ''}">
+      <td><div class="row" style="flex-wrap:nowrap"><input data-af="name" value="${esc(a.name)}" aria-label="Assignment name">${a.hypo ? '<span class="tag">what-if</span>' : ''}</div></td>
+      ${cats ? `<td><select data-af="cat" aria-label="Category"><option value="">—</option>${catOpts(a.cat)}</select></td>` : ''}
+      <td class="num"><input data-af="score" inputmode="decimal" value="${esc(val)}" placeholder="—" aria-label="Score"></td>
+      <td class="num"><input data-af="max" inputmode="decimal" value="${esc(a.max ?? '')}" aria-label="Points possible"></td>
+      <td class="num pct" data-pct="${a.id}"></td>
+      <td class="acts"><button class="ghost" data-act="excl" title="${a.excluded ? 'Count this assignment again' : "Don't count this assignment"}">${a.excluded ? 'Count' : 'Drop'}</button><button class="ghost danger" data-act="delA" title="Delete">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  const catRows = c.categories.map(k => `<tr data-cid="${k.id}">
+      <td><input data-cf="name" value="${esc(k.name)}" aria-label="Category name"></td>
+      <td class="num"><input data-cf="weight" inputmode="decimal" value="${esc(k.weight ?? '')}" aria-label="Weight percent"></td>
+      <td class="num pct" data-catpct="${k.id}"></td>
+      <td class="acts"><button class="ghost danger" data-act="delCat" title="Delete category">✕</button></td>
+    </tr>`).join('');
+
+  m.innerHTML = `
+  <div class="titlerow">
+    <input class="title" data-f="name" value="${esc(c.name)}" aria-label="Class name">
+    <button class="ghost danger" data-act="delClass">Delete class</button>
+  </div>
+
+  <section class="card summary">
+    <div class="big"><div class="lbl">Current grade</div><div class="num" id="sumActual"></div>${skywardLine(c)}</div>
+    <div class="big wi" id="wiBox"><div class="lbl">What-if grade</div><div class="num" id="sumWi"></div></div>
+    <div class="controls">
+      <label class="switch"><input type="checkbox" id="wiToggle" ${whatIf ? 'checked' : ''}> What-if mode</label>
+      <button data-act="resetWi" id="resetWi">Reset what-if</button>
+      <select data-f="mode" aria-label="Grading method">
+        <option value="weighted" ${c.mode === 'weighted' ? 'selected' : ''}>Weighted categories</option>
+        <option value="points" ${c.mode === 'points' ? 'selected' : ''}>Total points</option>
+      </select>
+    </div>
+  </section>
+
+  ${c.mode === 'weighted' ? `
+  <section class="card">
+    <h3>Categories</h3>
+    <table>
+      <colgroup><col><col class="c-score"><col class="c-max"><col></colgroup>
+      <thead><tr><th>Category</th><th class="num">Weight %</th><th class="num">Grade</th><th></th></tr></thead>
+      <tbody>${catRows || '<tr><td colspan="4" class="muted small">No categories yet. Add them (for example Tests 50, Quizzes 30, Homework 20), or switch to "Total points" if your class isn\'t weighted.</td></tr>'}</tbody>
+    </table>
+    <div class="row" style="margin-top:10px">
+      <input id="ncName" placeholder="Category name" style="flex:1;min-width:140px">
+      <input id="ncWeight" placeholder="Weight %" inputmode="decimal" style="width:100px">
+      <button data-act="addCat">Add category</button>
+    </div>
+    <div class="warnline" id="weightWarn"></div>
+  </section>` : ''}
+
+  <section class="card assign-card">
+    <h3>Assignments</h3>
+    <div class="banner">What-if mode: score changes and new assignments here are only hypothetical and won't change your real grade. Use "Reset what-if" to clear them.</div>
+    <table>
+      <colgroup><col>${cats ? '<col class="c-cat">' : ''}<col class="c-score"><col class="c-max"><col><col></colgroup>
+      <thead><tr><th>Assignment</th>${cats ? '<th>Category</th>' : ''}<th class="num">Score</th><th class="num">Out of</th><th class="num">%</th><th></th></tr></thead>
+      <tbody>
+        ${rows || `<tr><td colspan="${cats ? 6 : 5}" class="muted small">No assignments yet. Add one below or paste from Skyward.</td></tr>`}
+        <tr class="addrow">
+          <td><input id="naName" placeholder="${whatIf ? 'Hypothetical assignment' : 'New assignment'}"></td>
+          ${cats ? `<td><select id="naCat"><option value="">—</option>${catOpts(c.categories[0]?.id)}</select></td>` : ''}
+          <td class="num"><input id="naScore" inputmode="decimal" placeholder="Score"></td>
+          <td class="num"><input id="naMax" inputmode="decimal" placeholder="Out of"></td>
+          <td colspan="2" class="acts"><button class="primary" data-act="addA">Add</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>What do I need?</h3>
+    <div class="grid2">
+      <label>Target grade %<input id="needTarget" inputmode="decimal" value="${esc(sortedScale()[0]?.min ?? 90)}"></label>
+      ${cats ? `<label>Category<select id="needCat">${catOpts(c.categories[0]?.id)}</select></label>` : ''}
+      <label>Next assignment is out of<input id="needN" inputmode="decimal" value="100"></label>
+      <button data-act="need">Calculate</button>
+    </div>
+    <div class="result" id="needOut"></div>
+    <div class="muted small" style="margin-top:6px">Counts any what-if scores you've entered.</div>
+  </section>
+
+  <details class="card" id="importBox" ${pending ? 'open' : ''}>
+    <summary>Paste from Skyward</summary>
+    <ol class="steps">
+      <li>In Skyward, open <b>Gradebook</b> and click this class's grade to open the list of assignments.</li>
+      <li>Select the list (drag across it, or press Ctrl+A / ⌘A) and copy it.</li>
+      <li>Paste it below and click <b>Read assignments</b>. Check the preview, then add.</li>
+    </ol>
+    <textarea id="pasteBox" placeholder="Paste here…"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" data-act="parse">Read assignments</button>
+      <label class="small muted"><input type="checkbox" id="replaceAll"> Replace this class's existing assignments</label>
+    </div>
+    <div id="previewOut"></div>
+  </details>`;
+  renderPreview();
+  refreshNumbers();
+}
+
+function renderPreview() {
+  const box = $('#previewOut');
+  if (!box) return;
+  if (!pending) { box.innerHTML = ''; return; }
+  if (!pending.items.length) {
+    box.innerHTML = `<p class="warnline">No scores found. This reads lines with a score such as "18 out of 20" or "18/20". Try copying just the assignment list, or add assignments by hand.</p>`;
+    return;
+  }
+  const catNote = pending.newCats.length ? `<p class="small muted">Categories found: ${pending.newCats.map(k => `${esc(k.name)} (${k.weight}%)`).join(', ')}. They'll be added to this class.</p>` : '';
+  box.innerHTML = `${catNote}
+    <div class="preview"><table>
+      <thead><tr><th></th><th>Assignment</th><th>Category</th><th class="num">Score</th><th class="num">Out of</th></tr></thead>
+      <tbody>${pending.items.map((it, i) => `<tr><td><input type="checkbox" data-pi="${i}" ${it.keep ? 'checked' : ''}></td><td>${esc(it.name)}</td><td>${esc(it.catName || '—')}</td><td class="num">${it.score}</td><td class="num">${it.max}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" data-act="importSel">Add ${pending.items.filter(x => x.keep).length} assignments</button>
+      <button class="ghost" data-act="cancelImport">Cancel</button>
+    </div>`;
+}
+
+function refreshNumbers() {
+  const c = cur();
+  renderSidebar();
+  if (!c) return;
+  const A = calc(c, false), P = calc(c, true);
+  const sk = A.pct == null ? skyNum(c) : null;
+  $('#sumActual').innerHTML = sk != null ? gradeHTML(sk) + '<span class="small muted" style="font-size:14px;font-weight:500;margin-left:8px">from Skyward</span>' : gradeHTML(A.pct);
+  const hasWi = c.assignments.some(a => a.hypo || a.wi != null);
+  $('#wiBox').style.display = (whatIf || hasWi) ? '' : 'none';
+  let diff = '';
+  if (A.pct != null && P.pct != null && Math.abs(P.pct - A.pct) >= 0.005) {
+    const d = P.pct - A.pct;
+    diff = `<span class="diff ${d > 0 ? 'good' : 'bad'}">${d > 0 ? '+' : ''}${d.toFixed(2)}</span>`;
+  }
+  $('#sumWi').innerHTML = gradeHTML(P.pct) + diff;
+  $('#resetWi').disabled = !hasWi;
+  c.assignments.forEach(a => {
+    const el = document.querySelector(`[data-pct="${a.id}"]`);
+    if (!el) return;
+    const v = whatIf ? eff(a, true) : (a.excluded ? null : a.score);
+    const p = (v != null && a.max > 0) ? v / a.max * 100 : null;
+    el.textContent = p == null ? '—' : p.toFixed(1);
+    el.className = 'num pct ' + tone(p);
+  });
+  const R = whatIf ? P : A;
+  c.categories.forEach(k => {
+    const el = document.querySelector(`[data-catpct="${k.id}"]`);
+    if (!el) return;
+    const p = R.cats[k.id]?.pct ?? null;
+    el.textContent = p == null ? '—' : p.toFixed(1) + '%';
+    el.className = 'num pct ' + tone(p);
+  });
+  const ww = $('#weightWarn');
+  if (ww) {
+    const sum = c.categories.reduce((s, k) => s + (num(k.weight) || 0), 0);
+    const uncat = c.assignments.filter(a => !a.hypo && !c.categories.some(k => k.id === a.cat)).length;
+    const msgs = [];
+    if (c.categories.length && Math.abs(sum - 100) > 0.01) msgs.push(`Weights add up to ${+sum.toFixed(2)}%, not 100%. Grades are scaled to the categories that have scores.`);
+    if (c.categories.length && uncat) msgs.push(`${uncat} assignment${uncat > 1 ? 's have' : ' has'} no category and won't count until you pick one.`);
+    ww.textContent = msgs.join(' ');
+  }
+}
+
+function renderAll() { renderSidebar(); renderScale(); renderMain(); }
+
+// ---------- events: sidebar ----------
+$('#classlist').addEventListener('click', e => {
+  const li = e.target.closest('li[data-id]');
+  if (!li) return;
+  currentId = li.dataset.id; pending = null; renderSidebar(); renderMain();
+});
+function addClass() {
+  const inp = $('#newClass'), name = inp.value.trim();
+  if (!name) { inp.focus(); return; }
+  const c = { id: uid(), name, mode: 'weighted', assignments: [],
+              categories: [{ id: uid(), name: 'Major', weight: 60 }, { id: uid(), name: 'Daily/Minor', weight: 40 }] };
+  state.classes.push(c); currentId = c.id; inp.value = ''; pending = null;
+  save(); renderSidebar(); renderMain();
+}
+$('#addClass').addEventListener('click', addClass);
+$('#newClass').addEventListener('keydown', e => { if (e.key === 'Enter') addClass(); });
+
+$('#scale').addEventListener('input', e => {
+  const row = e.target.closest('[data-gi]'); if (!row) return;
+  const g = state.scale[+row.dataset.gi]; if (!g) return;
+  if (e.target.dataset.g === 'l') g.l = e.target.value.trim();
+  else g.min = e.target.value.trim() === '' ? '' : (num(e.target.value) ?? g.min);
+  save(); refreshNumbers();
+});
+$('#scale').addEventListener('click', e => {
+  const b = e.target.closest('[data-gdel]'); if (!b) return;
+  state.scale.splice(+b.dataset.gdel, 1); save(); renderScale(); refreshNumbers();
+});
+$('#addGrade').addEventListener('click', () => { state.scale.push({ l: '', min: '' }); renderScale(); });
+$('#resetScale').addEventListener('click', () => { state.scale = DEFAULT_SCALE.map(x => ({...x})); save(); renderScale(); refreshNumbers(); });
+
+$('#exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `my-grades-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('#importBtn').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    if (!s || !Array.isArray(s.classes)) throw new Error('bad');
+    state = normalize(s); currentId = state.classes[0]?.id ?? null; pending = null; whatIf = false;
+    save(); renderAll();
+  } catch (err) {
+    $('#importBtn').textContent = 'Not a valid backup file';
+    setTimeout(() => $('#importBtn').textContent = 'Import backup', 2500);
+  }
+  e.target.value = '';
+});
+$('#eraseBtn').addEventListener('click', () => {
+  const b = $('#eraseBtn');
+  if (!eraseArmed) {
+    eraseArmed = true; b.textContent = 'Click again to erase all classes';
+    setTimeout(() => { eraseArmed = false; b.textContent = 'Erase everything'; }, 4000);
+    return;
+  }
+  eraseArmed = false; b.textContent = 'Erase everything';
+  state = { classes: [], scale: DEFAULT_SCALE.map(x => ({...x})) }; currentId = null; pending = null; whatIf = false;
+  save(); renderAll();
+});
+
+// ---------- events: main ----------
+const main = $('#main');
+main.addEventListener('input', e => {
+  if (currentId === GPA_ID) {
+    const t = e.target, tr = t.closest('tr[data-gcid]');
+    if (!tr || !t.dataset.gterm) return;
+    const c = state.classes.find(x => x.id === tr.dataset.gcid); if (!c) return;
+    c.gpa = c.gpa || {}; c.gpa.ov = c.gpa.ov || {};
+    const d = defaultTerm(c, t.dataset.gterm), v = t.value.trim();
+    if ((v === '' && d == null) || (v !== '' && num(v) != null && d != null && num(v) === d)) delete c.gpa.ov[t.dataset.gterm];
+    else c.gpa.ov[t.dataset.gterm] = v;
+    t.classList.toggle('gchanged', c.gpa.ov[t.dataset.gterm] !== undefined);
+    save(); refreshGPA(); return;
+  }
+  const t = e.target, c = cur();
+  if (!c || t.tagName === 'SELECT' || t.type === 'checkbox') return;
+  if (t.dataset.f === 'name') { c.name = t.value; save(); renderSidebar(); return; }
+  const tr = t.closest('tr[data-aid]');
+  if (tr && t.dataset.af) {
+    const a = c.assignments.find(x => x.id === tr.dataset.aid); if (!a) return;
+    const f = t.dataset.af;
+    if (f === 'name') a.name = t.value;
+    else if (f === 'max') a.max = num(t.value);
+    else if (f === 'score') {
+      const v = num(t.value);
+      if (whatIf && !a.hypo) {
+        if (v == null || v === a.score) delete a.wi; else a.wi = v;
+        tr.classList.toggle('changed', a.wi != null);
+      } else a.score = v;
+    }
+    save(); refreshNumbers(); return;
+  }
+  const cr = t.closest('tr[data-cid]');
+  if (cr && t.dataset.cf) {
+    const k = c.categories.find(x => x.id === cr.dataset.cid); if (!k) return;
+    if (t.dataset.cf === 'name') k.name = t.value; else k.weight = num(t.value);
+    save(); refreshNumbers();
+  }
+});
+main.addEventListener('change', e => {
+  if (currentId === GPA_ID) {
+    const t = e.target, tr = t.closest('tr[data-gcid]');
+    if (!tr || !t.hasAttribute('data-glevel')) return;
+    const c = state.classes.find(x => x.id === tr.dataset.gcid); if (!c) return;
+    c.gpa = c.gpa || {}; c.gpa.level = +t.value;
+    document.querySelectorAll(`tr[data-gcid="${c.id}"] select[data-glevel]`).forEach(s => { s.value = t.value; });
+    save(); refreshGPA(); return;
+  }
+  const t = e.target, c = cur(); if (!c) return;
+  if (t.id === 'wiToggle') { whatIf = t.checked; renderMain(); return; }
+  if (t.dataset.f === 'mode') { c.mode = t.value; save(); renderMain(); return; }
+  if (t.dataset.af === 'cat') {
+    const tr = t.closest('tr[data-aid]');
+    const a = c.assignments.find(x => x.id === tr.dataset.aid);
+    if (a) { a.cat = t.value || null; save(); refreshNumbers(); }
+    return;
+  }
+  if (t.dataset.pi != null && pending) {
+    pending.items[+t.dataset.pi].keep = t.checked;
+    const b = main.querySelector('[data-act="importSel"]');
+    if (b) b.textContent = `Add ${pending.items.filter(x => x.keep).length} assignments`;
+  }
+});
+main.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (['naName', 'naScore', 'naMax'].includes(e.target.id)) addAssignment();
+  if (['ncName', 'ncWeight'].includes(e.target.id)) addCategory();
+  if (['needTarget', 'needN'].includes(e.target.id)) calcNeed();
+});
+main.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act, c = cur();
+  if (act === 'sample') return loadSample();
+  if (act === 'gpaReset') { state.classes.forEach(x => { if (x.gpa) delete x.gpa.ov; }); save(); renderGPA(); return; }
+  if (!c) return;
+  const tr = b.closest('tr[data-aid]');
+  const a = tr ? c.assignments.find(x => x.id === tr.dataset.aid) : null;
+  switch (act) {
+    case 'delClass': {
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Click again to delete'; setTimeout(() => { if (b.isConnected) { b.dataset.armed = ''; b.textContent = 'Delete class'; } }, 4000); return; }
+      state.classes = state.classes.filter(x => x.id !== c.id);
+      currentId = state.classes[0]?.id ?? null; pending = null; save(); renderSidebar(); renderMain(); return;
+    }
+    case 'resetWi':
+      c.assignments = c.assignments.filter(x => !x.hypo);
+      c.assignments.forEach(x => delete x.wi);
+      save(); renderMain(); return;
+    case 'excl': if (a) { a.excluded = !a.excluded; save(); renderMain(); } return;
+    case 'delA': if (a) { c.assignments = c.assignments.filter(x => x !== a); save(); renderMain(); } return;
+    case 'addA': return addAssignment();
+    case 'addCat': return addCategory();
+    case 'delCat': {
+      const cid = b.closest('tr[data-cid]').dataset.cid;
+      c.categories = c.categories.filter(k => k.id !== cid);
+      c.assignments.forEach(x => { if (x.cat === cid) x.cat = null; });
+      save(); renderMain(); return;
+    }
+    case 'need': return calcNeed();
+    case 'parse': {
+      const text = $('#pasteBox').value;
+      pending = parsePaste(text, c);
+      renderPreview(); return;
+    }
+    case 'cancelImport': pending = null; $('#pasteBox').value = ''; renderPreview(); return;
+    case 'importSel': return importPending();
+  }
+});
+
+function addAssignment() {
+  const c = cur(); if (!c) return;
+  const name = $('#naName').value.trim();
+  const max = num($('#naMax').value);
+  if (!name) { $('#naName').focus(); return; }
+  if (!(max > 0)) { $('#naMax').focus(); return; }
+  const a = { id: uid(), name, score: num($('#naScore').value), max, cat: $('#naCat')?.value || null };
+  if (whatIf) a.hypo = true;
+  c.assignments.push(a);
+  save(); renderMain();
+  $('#naName')?.focus();
+}
+function addCategory() {
+  const c = cur(); if (!c) return;
+  const name = $('#ncName').value.trim();
+  if (!name) { $('#ncName').focus(); return; }
+  c.categories.push({ id: uid(), name, weight: num($('#ncWeight').value) });
+  save(); renderMain();
+  $('#ncName')?.focus();
+}
+function calcNeed() {
+  const c = cur(); if (!c) return;
+  const out = $('#needOut');
+  const target = num($('#needTarget').value), N = num($('#needN').value);
+  const catId = $('#needCat')?.value;
+  if (target == null || !(N > 0)) { out.innerHTML = '<span class="warnline">Enter a target percent and how many points the assignment is worth.</span>'; return; }
+  const x = needed(c, catId, N, target);
+  if (x == null) { out.innerHTML = '<span class="warnline">That category needs a weight above 0%.</span>'; return; }
+  const catName = usesCats(c) ? ` ${esc(c.categories.find(k => k.id === catId)?.name || '')}` : '';
+  if (x <= 0) out.innerHTML = `You'll stay at or above <b>${target}%</b> even with a 0 on a${catName} assignment out of ${N}.`;
+  else if (x > N) out.innerHTML = `You'd need <b>${x.toFixed(1)} / ${N}</b> (${(x / N * 100).toFixed(1)}%). That's more than the assignment is worth, so ${target}% isn't reachable with one${catName} assignment of ${N} points.`;
+  else out.innerHTML = `You need at least <b>${x.toFixed(1)} / ${N}</b> (<b>${(x / N * 100).toFixed(1)}%</b>) on the next${catName} assignment to reach ${target}%.`;
+}
+function importPending() {
+  const c = cur(); if (!c || !pending) return;
+  const chosen = pending.items.filter(x => x.keep);
+  if ($('#replaceAll')?.checked) c.assignments = c.assignments.filter(a => a.hypo);
+  const catByName = name => {
+    if (!name) return null;
+    let k = c.categories.find(k => k.name.trim().toLowerCase() === name.toLowerCase());
+    if (!k) {
+      const nc = pending.newCats.find(n => n.name.toLowerCase() === name.toLowerCase());
+      k = { id: uid(), name, weight: nc ? nc.weight : null };
+      c.categories.push(k);
+    }
+    return k.id;
+  };
+  pending.newCats.forEach(n => catByName(n.name));
+  if (pending.newCats.length) c.mode = 'weighted';
+  chosen.forEach(it => c.assignments.push({ id: uid(), name: it.name, score: it.score, max: it.max, cat: catByName(it.catName) }));
+  pending = null;
+  save(); renderMain();
+}
+function loadSample() {
+  const T = uid(), Q = uid(), H = uid();
+  const c = {
+    id: uid(), name: 'Biology (sample)', mode: 'weighted',
+    categories: [{ id: T, name: 'Tests', weight: 50 }, { id: Q, name: 'Quizzes', weight: 30 }, { id: H, name: 'Homework', weight: 20 }],
+    assignments: [
+      { id: uid(), name: 'Unit 1 Test: Cells', cat: T, score: 84, max: 100 },
+      { id: uid(), name: 'Unit 2 Test: Genetics', cat: T, score: 91, max: 100 },
+      { id: uid(), name: 'Quiz: Mitosis', cat: Q, score: 18, max: 20 },
+      { id: uid(), name: 'Quiz: Punnett squares', cat: Q, score: 15, max: 20 },
+      { id: uid(), name: 'Quiz: DNA structure', cat: Q, score: 19, max: 20 },
+      { id: uid(), name: 'HW: Cell diagram', cat: H, score: 10, max: 10 },
+      { id: uid(), name: 'HW: Genetics worksheet', cat: H, score: 8, max: 10 },
+      { id: uid(), name: 'HW: Lab write-up', cat: H, score: 0, max: 10 },
+    ]
+  };
+  state.classes.push(c); currentId = c.id;
+  save(); renderSidebar(); renderMain();
+}
+
+// ---------- grades pulled by skyward_grades.py (grades-data.js) ----------
+let sky = window.SKYWARD_DATA;
+const serverMode = !!(sky && sky.server);
+const fmtTime = iso => { try { return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return iso; } };
+function applySkyward() {
+  sky.classes.forEach(sc => {
+    const fresh = normalize({ classes: [JSON.parse(JSON.stringify(sc))] }).classes[0];
+    const i = state.classes.findIndex(c => c.name.trim().toLowerCase() === fresh.name.trim().toLowerCase());
+    if (i >= 0) { fresh.id = state.classes[i].id; state.classes[i] = fresh; }
+    else state.classes.push(fresh);
+  });
+  state.lastPulled = sky.pulledAt;
+  if (!cur() && currentId !== GPA_ID) currentId = state.classes[0]?.id ?? null;
+  whatIf = false; pending = null;
+  save(); renderAll(); showSync();
+}
+function showSync() {
+  const b = $('#syncBanner');
+  if (state.lastPulled) $('#lastPulled').textContent = `Last pulled from Skyward: ${fmtTime(state.lastPulled)}.`;
+  if (sky && Array.isArray(sky.classes) && sky.classes.length && sky.pulledAt && sky.pulledAt !== state.lastPulled) {
+    b.hidden = false;
+    b.innerHTML = `<span>New grades from Skyward (pulled ${esc(fmtTime(sky.pulledAt))}, ${sky.classes.length} class${sky.classes.length > 1 ? 'es' : ''}).</span>
+      <button class="primary" id="applySky">Load them</button>
+      <span class="small muted">Replaces classes with the same name, including any what-if changes in them.</span>`;
+    $('#applySky').onclick = applySkyward;
+  } else b.hidden = true;
+}
+
+// ---------- Cloudflare mode: sign in from this page; nothing is stored on the server ----------
+const LOGIN_KEY = 'mygrades.login';
+const loadLogin = () => { try { return JSON.parse(localStorage.getItem(LOGIN_KEY)) || {}; } catch (e) { return {}; } };
+const saveLogin = o => { try { localStorage.setItem(LOGIN_KEY, JSON.stringify(o)); } catch (e) {} };
+let lastFailure = null, lastNotes = null;
+
+function showServerStatus() {
+  if (!serverMode) return;
+  const box = $('#pullStatus'), saved = loadLogin();
+  let h = '';
+  if (lastFailure) {
+    const f = lastFailure;
+    h += `<p class="warnline">Last pull failed: ${esc(f.error)}${f.steps && f.steps.length ? ` <span class="muted">Got as far as: ${esc(f.steps[f.steps.length - 1])}.</span>` : ''}</p>`;
+    if (f.screenshot && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(f.screenshot)) {
+      h += `<p class="small muted">What the browser saw:</p><img src="${f.screenshot}" alt="Screenshot of where the pull got stuck" style="width:100%;border:1px solid var(--line);border-radius:8px">`;
+    }
+    if (f.pageHtml) h += `<p class="small"><a id="dlPage" href="#">Download a copy of that page</a> <span class="muted">(remove your name before sharing it)</span></p>`;
+  }
+  if (!lastFailure && lastNotes && (lastNotes.notes || []).length) {
+    h += lastNotes.notes.map(n => `<p class="warnline">${esc(n)}</p>`).join('');
+    if (lastNotes.detailsHtml) h += `<p class="small"><a id="dlDetails" href="#">Download the details page</a> <span class="muted">(remove names before sharing it)</span></p>`;
+  }
+  if (saved.password) h += `<p class="small muted">Login saved on this device${saved.username ? ' for ' + esc(saved.username) : ''}. <button class="ghost" id="forgetLogin">Forget it</button></p>`;
+  box.innerHTML = h;
+  const fl = $('#forgetLogin');
+  if (fl) fl.onclick = () => { const s = loadLogin(); delete s.password; delete s.username; saveLogin(s); showServerStatus(); };
+  const dd = $('#dlDetails');
+  if (dd) dd.onclick = e => {
+    e.preventDefault();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([lastNotes.detailsHtml], { type: 'text/html' }));
+    a.download = 'skyward_details.html'; document.body.appendChild(a); a.click(); a.remove();
+  };
+  const dl = $('#dlPage');
+  if (dl) dl.onclick = e => {
+    e.preventDefault();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([lastFailure.pageHtml], { type: 'text/html' }));
+    a.download = 'skyward_page.html'; document.body.appendChild(a); a.click(); a.remove();
+  };
+}
+
+function openSignIn() {
+  const saved = loadLogin();
+  $('#signin')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'signin'; ov.className = 'overlay';
+  ov.innerHTML = `<form class="card signin" autocomplete="on">
+    <h3>Sign in to pull your grades</h3>
+    <label>ClassLink address<input name="classlinkUrl" required inputmode="url" placeholder="https://launchpad.classlink.com/yourdistrict" value="${esc(saved.classlinkUrl || '')}"></label>
+    <label>ClassLink username<input name="username" autocomplete="username" required value="${esc(saved.username || '')}"></label>
+    <label>ClassLink password<input name="password" type="password" autocomplete="current-password" required></label>
+    <details ${saved.gradesUrl || saved.term ? 'open' : ''}><summary class="small">More options</summary>
+      <label>Skyward grades page address (optional)<input name="gradesUrl" inputmode="url" placeholder="https://.../grading" value="${esc(saved.gradesUrl || '')}"></label>
+      <label>Term (optional, e.g. Q2)<input name="term" value="${esc(saved.term || '')}"></label>
+    </details>
+    <label class="check"><input type="checkbox" name="remember" ${saved.password ? 'checked' : ''}> Remember my login on this device</label>
+    <p class="small muted">If you tick this, your password is saved unencrypted in this browser, so anyone who uses this browser could find it. Either way, it's only sent to your own Worker for this pull and isn't stored on Cloudflare.</p>
+    <div class="row"><button class="primary" type="submit">Pull grades</button><button type="button" class="ghost" id="cancelSignin">Cancel</button></div>
+  </form>`;
+  document.body.appendChild(ov);
+  const form = ov.querySelector('form');
+  (saved.classlinkUrl ? (saved.username ? form.password : form.username) : form.classlinkUrl).focus();
+  $('#cancelSignin').onclick = () => ov.remove();
+  ov.addEventListener('keydown', e => { if (e.key === 'Escape') ov.remove(); });
+  form.onsubmit = e => {
+    e.preventDefault();
+    const f = form.elements;
+    let cl = f.classlinkUrl.value.trim();
+    if (cl && !/^https?:\/\//i.test(cl)) cl = 'https://' + cl;
+    const login = { classlinkUrl: cl, gradesUrl: f.gradesUrl.value.trim(), term: f.term.value.trim(),
+                    username: f.username.value.trim(), password: f.password.value };
+    if (f.remember.checked) saveLogin(login);
+    else saveLogin({ classlinkUrl: login.classlinkUrl, gradesUrl: login.gradesUrl, term: login.term });
+    ov.remove();
+    doPull(login);
+  };
+}
+
+function pullNow() {
+  const s = loadLogin();
+  if (s.classlinkUrl && s.username && s.password) doPull(s); else openSignIn();
+}
+
+async function doPull(login) {
+  const btn = $('#pullBtn'), msg = $('#pullMsg');
+  btn.disabled = true; btn.textContent = 'Pulling...';
+  msg.textContent = 'Signing in to Skyward. This takes about a minute.';
+  try {
+    const r = await fetch('api/pull', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ classlinkUrl: login.classlinkUrl, gradesUrl: login.gradesUrl || '', term: login.term || '',
+                             username: login.username, password: login.password }),
+    });
+    const j = await r.json().catch(() => ({ ok: false, error: `Server error (${r.status}).` }));
+    if (j.ok) {
+      sky = j.data; lastFailure = null; lastNotes = { notes: j.notes, detailsHtml: j.detailsHtml }; applySkyward();
+      if ((j.notes || []).length) $('#skyHelp').open = true;
+      msg.textContent = `Updated ${sky.classes.length} class${sky.classes.length === 1 ? '' : 'es'}.`;
+    } else {
+      lastFailure = j;
+      msg.textContent = 'Pull failed. See "Update from Skyward" on the left.';
+      $('#skyHelp').open = true;
+    }
+  } catch (e) {
+    lastFailure = { error: "Couldn't reach your Worker. Check your connection." };
+    msg.textContent = lastFailure.error;
+  }
+  showServerStatus();
+  btn.disabled = false; btn.textContent = 'Pull from Skyward';
+}
+if (sky && sky.source === 'colab') {
+  $('#localSteps').innerHTML = '<li>In the Colab notebook, run the <b>Sign in</b> and <b>Pull my grades</b> cells again.</li><li>Run <b>Show my grades</b>, then <b>Download</b> to save this page with the new grades.</li>';
+  $('#localNote').textContent = 'Opened from the Colab notebook.';
+}
+if (serverMode) {
+  $('#hdrNote').textContent = 'Your grades are saved in this browser.';
+  $('#pullBtn').hidden = false;
+  $('#pullBtn').onclick = pullNow;
+  $('#localSteps').innerHTML = '<li>Click <b>Pull from Skyward</b> at the top and sign in with your ClassLink login.</li><li>Your grades are saved in this browser. Pull again whenever you want fresh ones.</li>';
+  $('#localNote').textContent = 'Each pull uses about a minute of Cloudflare\'s free browser time (10 minutes a day).';
+  showServerStatus();
+}
+
+renderAll();
+if (sky && Array.isArray(sky.classes) && sky.classes.length && !state.classes.length && sky.pulledAt !== state.lastPulled) applySkyward();
+else showSync();
+})();
+</script>
+</body>
+</html>
