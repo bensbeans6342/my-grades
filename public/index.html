@@ -56,6 +56,10 @@ aside summary{cursor:pointer;font-weight:600;font-size:14px}
 .big.wi .lbl{color:var(--wi)}
 .diff{font-size:14px;font-weight:600;margin-left:8px}
 .controls{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.wibtn{font-weight:700;border:0}
+.wibtn.off{background:#d92d20;color:#fff}
+.wibtn.on{background:#84cc16;color:#1a2e05}
+.wibtn:hover:not(:disabled){filter:brightness(1.08);border:0}
 .switch{display:inline-flex;gap:8px;align-items:center;cursor:pointer;user-select:none;font-weight:600;color:var(--wi)}
 .switch input{width:16px;height:16px;accent-color:var(--wi)}
 body.wimode .assign-card{border-color:var(--wi);background:linear-gradient(var(--wi-bg),var(--wi-bg))}
@@ -549,7 +553,7 @@ function renderMain() {
     <div class="big"><div class="lbl">Current grade</div><div class="num" id="sumActual"></div>${skywardLine(c)}</div>
     <div class="big wi" id="wiBox"><div class="lbl">What-if grade</div><div class="num" id="sumWi"></div></div>
     <div class="controls">
-      <label class="switch"><input type="checkbox" id="wiToggle" ${whatIf ? 'checked' : ''}> What-if mode</label>
+      <button id="wiToggle" data-act="wiToggle" class="wibtn ${whatIf ? 'on' : 'off'}" aria-pressed="${whatIf}">${whatIf ? 'Turn off what-if' : 'Turn on what-if'}</button>
       <button data-act="resetWi" id="resetWi">Reset what-if</button>
       <select data-f="mode" aria-label="Grading method">
         <option value="weighted" ${c.mode === 'weighted' ? 'selected' : ''}>Weighted categories</option>
@@ -802,7 +806,6 @@ main.addEventListener('change', e => {
     save(); refreshGPA(); return;
   }
   const t = e.target, c = cur(); if (!c) return;
-  if (t.id === 'wiToggle') { whatIf = t.checked; renderMain(); return; }
   if (t.dataset.f === 'mode') { c.mode = t.value; save(); renderMain(); return; }
   if (t.dataset.af === 'cat') {
     const tr = t.closest('tr[data-aid]');
@@ -826,6 +829,7 @@ main.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act, c = cur();
   if (act === 'sample') return loadSample();
+  if (act === 'wiToggle') { whatIf = !whatIf; renderMain(); $('#wiToggle')?.focus({ preventScroll: true }); return; }
   if (act === 'gpaReset') { state.classes.forEach(x => { if (x.gpa) delete x.gpa.ov; }); save(); renderGPA(); return; }
   if (!c) return;
   const tr = b.closest('tr[data-aid]');
@@ -1499,7 +1503,7 @@ const TOUR = [
   { title: 'Welcome to My Grades', text: 'This page shows your Skyward grades, lets you try "what-if" scores, and works out your GPA. Here\'s a quick tour. You can skip it any time.' },
   { sel: '#pullBtn', title: 'Pull from Skyward', text: 'Click here and sign in with your ClassLink username and password. The district settings are already filled in. Your password only goes to this site\'s own Worker for the pull and isn\'t stored there.' },
   { sel: '#classlist', title: 'Your classes', text: 'After a pull, every class shows up here with its grade. Click a class to see its assignments. You can also add a class by hand below.' },
-  { sel: '#wiToggle', parent: '.controls', title: 'What-if mode', text: 'Turn this on to change scores or add pretend assignments and see how your grade would move. Your real grade doesn\'t change. "Reset what-if" clears them.' },
+  { sel: '#wiToggle', parent: '.controls', title: 'What-if mode', text: 'Click "Turn on what-if" (red means it\'s off, green means it\'s on) to change scores or add pretend assignments and see how your grade would move. Your real grade doesn\'t change. "Reset what-if" clears them.' },
   { sel: '#needTarget', parent: '.card', title: 'What do I need?', text: 'Enter the grade you want, and this tells you what you need on the next assignment to get there.' },
   { sel: '#classlist li[data-id="__gpa"]', alt: '#classlist', title: 'GPA calculator', text: 'Shows your GPA by semester from your period and exam grades. Change any grade to see how it would affect your GPA.' },
   { sel: '#incogBtn', title: 'Incognito', text: 'Click this to hide every grade behind a blurred fake number, handy when someone\'s looking over your shoulder. Click any grade to see the real one.' },
