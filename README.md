@@ -32,7 +32,7 @@ There are no secrets, variables or storage to set up.
    username and password.
    - **More options**: if it gets stuck on the Skyward home page, paste the address of
      your Grading tab (copy it from your browser's address bar while you're on it).
-     You can also pick a term like `Q2`.
+     You can also pick a term like `NW1` (default: the current, highlighted term).
 3. Wait about a minute. Your classes appear on the left.
 
 Your grades stay in that browser. To use another device, use **Backup & data** >
@@ -46,9 +46,11 @@ screenshot of what the browser saw.
 - **"Still on the login page"**: check your username and password.
 - **"Couldn't find the ClassLink login form"**: check the ClassLink address. It should
   be the page where you choose **Network Login**.
-- **"its layout isn't the classic Skyward Gradebook"**: your district's grades page looks
-  different from what this reads. Use **Download a copy of that page**, remove your name,
-  and share it so the reader can be adapted.
+- **"couldn't find a grades table on it"**: your district's grades page looks different
+  from what this reads. Use **Download a copy of that page**, remove names, and share it
+  so the reader can be adapted.
+- **"couldn't read the assignment details"**: you still get every class's Skyward grades.
+  Use **Download the details page**, remove names, and share it so it can be adapted.
 - **"free browser time for today is used up"**: the free plan allows 10 minutes of
   browser time a day, and each pull uses about 1 to 2. It resets at 6 PM Central.
 - ClassLink may treat sign-ins from Cloudflare's servers differently from your home
@@ -70,5 +72,6 @@ screenshot of what the browser saw.
 
 - `public/index.html`: the grade page
 - `src/index.js`: the Worker (serves the page, handles **Pull from Skyward**)
-- `src/pull.js`: signs in to ClassLink, opens Skyward's grades, and reads them
+- `src/pull.js`: signs in to ClassLink, opens Skyward's grades, and reads classic Gradebook
+- `src/qmlativ.js`: reads Skyward's newer **Student Grades** page
 - `wrangler.jsonc`: Cloudflare settings

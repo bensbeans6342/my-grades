@@ -46,10 +46,10 @@ async function doPull(env, body) {
   let pageHtml = null, browser;
   try {
     browser = await launch(env.BROWSER);
-    const { classes } = await pullGrades(browser, {
+    const { classes, notes, detailsHtml } = await pullGrades(browser, {
       ...cfg, log: m => steps.push(m), onUnknownLayout: html => { pageHtml = html; },
     });
-    return { ok: true, data: { server: true, pulledAt: new Date().toISOString(), classes } };
+    return { ok: true, data: { server: true, pulledAt: new Date().toISOString(), classes }, notes, detailsHtml, steps };
   } catch (e) {
     let screenshot = null;
     try {

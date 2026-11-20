@@ -15,7 +15,8 @@ const SUBMIT_BTNS = ['#signin', 'button[type="submit"]', 'input[type="submit"]',
 const SKYWARD_TILE = ['[aria-label*="Skyward" i]', '[title*="Skyward" i]', 'img[alt*="Skyward" i]',
   'a:has-text("Skyward")', 'div:has-text("Skyward") >> nth=-1'];
 const GRADEBOOK_NAV = ['[data-nav*="gradebook" i]', 'a[href$="/grading" i]', 'a[href*="/grading" i]',
-  'a:has-text("Gradebook")', '[role="tab"]:has-text("Grading")', 'a:has-text("Grading")', 'text=Gradebook'];
+  'a:has-text("Gradebook")', '[role="tab"]:has-text("Grading")', 'a:has-text("Grading")',
+  'a:has-text("Student Grades")', '[role="menuitem"]:has-text("Student Grades")', 'text=Gradebook', 'text=Student Grades'];
 const GRADES_PAGE_RE = /\/grading|gradebook/i;
 
 async function skywardPage(context, timeoutMs) {
@@ -34,6 +35,8 @@ const WEIGHT_RE = /^([\s\S]*?)\s*[(\-–:]?\s*weighted at\s*(\d+(?:\.\d+)?)\s*%/
 const FULL_DATE_RE = /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g;
 const JUNK_RE = /^([A-F][+-]?|-?\d+(\.\d+)?%?|\d{1,2}\/\d{1,2}|\*|-|—|(due|assigned|score|points( earned)?|grade|assignment|category|missing|no count|absent)s?)$/i;
 const HEADING_SKIP = /^(class grades?|grade info|gradebook|close|print)$/i;
+
+import { readQGridInPage, pullQmlativ } from './qmlativ.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -135,7 +138,9 @@ async function waitForGradebook(context, timeoutMs, gradesUrl, onUnknownLayout) 
     for (const page of context.pages()) {
       try {
         for (const frame of page.frames()) {
-          if ((await frame.locator(GRADE_LINK).count()) > 0) { await sleep(1500); return { page, frame }; }
+          if ((await frame.locator(GRADE_LINK).count()) > 0) { await sleep(1500); return { page, frame, kind: 'classic' }; }
+          const q = await frame.evaluate(readQGridInPage).catch(() => null);
+          if (q && q.rows.length) { await sleep(1500); pullGrades.lastPage = page; return { page, frame, kind: 'qmlativ' }; }
         }
       } catch (e) {}
     }
@@ -145,7 +150,7 @@ async function waitForGradebook(context, timeoutMs, gradesUrl, onUnknownLayout) 
       since = since || Date.now();
       if (Date.now() - since > 20000) {
         try { if (onUnknownLayout) await onUnknownLayout(await gp.content()); } catch (e) {}
-        throw new PullError(`Reached ${gp.url()} but its layout isn't the classic Skyward Gradebook this reads. Download the copy of the page below and share it (with your name removed) so the reader can be adapted.`);
+        throw new PullError(`Reached ${gp.url()} but couldn't find a grades table on it that this can read. Download the copy of the page below and share it (with your name removed) so the reader can be adapted.`);
       }
     }
     await sleep(1000);
@@ -274,7 +279,8 @@ export async function pullGrades(browser, cfg) {
   await page.goto(cfg.url.includes('://') ? cfg.url : 'https://' + cfg.url);
   log('Opened ClassLink');
   await signIn(context, cfg.username, cfg.password, log, cfg.gradesUrl);
-  const { page: gbPage, frame } = await waitForGradebook(context, 90000, cfg.gradesUrl, cfg.onUnknownLayout);
+  const { page: gbPage, frame, kind } = await waitForGradebook(context, 90000, cfg.gradesUrl, cfg.onUnknownLayout);
+  if (kind === 'qmlativ') return pullQmlativ({ context, page: gbPage, frame, term: cfg.term, log, PullError });
   const links = await chooseLinks(frame, cfg.term);
   if (!links.length) throw new PullError(`No grades found${cfg.term ? ' for term ' + cfg.term : ''} in Gradebook.`);
   log(`Found ${links.length} classes`);
@@ -295,7 +301,7 @@ export async function pullGrades(browser, cfg) {
       term: info['data-lit'] || '',
     });
   }
-  return { classes };
+  return { classes, notes: [], detailsHtml: null };
 }
 
 export { PullError };

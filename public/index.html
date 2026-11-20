@@ -261,6 +261,8 @@ function tone(p) {
   if (i >= 2) return 'warn';
   return 'ok';
 }
+const skyNum = c => { const m = String(c.skywardGrade ?? '').match(/^\d+(?:\.\d+)?/); return m ? +m[0] : null; };
+const shownPct = c => calc(c, false).pct ?? skyNum(c);
 const gradeHTML = p => `<span class="${tone(p)}">${fmt(p)}</span><span class="letter">${esc(letter(p))}</span>`;
 
 // ---------- Skyward paste parser ----------
@@ -307,7 +309,7 @@ function titleCase(s) { return s === s.toUpperCase() ? s.toLowerCase().replace(/
 function renderSidebar() {
   const ul = $('#classlist');
   ul.innerHTML = state.classes.length ? state.classes.map(c => {
-    const p = calc(c, false).pct;
+    const p = shownPct(c);
     return `<li data-id="${c.id}" class="${c.id === currentId ? 'active' : ''}"><span class="nm">${esc(c.name)}</span><span class="pill ${tone(p)}">${p == null ? '—' : p.toFixed(1)}</span></li>`;
   }).join('') : '<li class="empty">No classes yet</li>';
 }
@@ -318,6 +320,16 @@ function renderScale() {
       <input data-g="min" value="${esc(g.min)}" inputmode="decimal" aria-label="Minimum percent" placeholder="min %">
       <button class="ghost danger" data-gdel="${i}" title="Remove">✕</button>
     </div>`).join('');
+}
+
+function skywardLine(c) {
+  const parts = [];
+  if (Array.isArray(c.termGrades) && c.termGrades.length) {
+    parts.push('Skyward: ' + c.termGrades.map(t => t.label === c.term ? `<b>${esc(t.label)} ${esc(t.grade)}</b>` : `${esc(t.label)} ${esc(t.grade)}`).join(' · '));
+  } else if (c.skywardGrade) parts.push(`Skyward shows ${esc(c.skywardGrade)}${c.term ? ` (${esc(c.term)})` : ''}`);
+  if (c.missing) parts.push(`<span class="bad">${c.missing} missing assignment${c.missing === 1 ? '' : 's'}</span>`);
+  if (c.period) parts.push(esc(c.period));
+  return parts.length ? `<div class="skyline">${parts.join(' · ')}</div>` : '';
 }
 
 function renderMain() {
@@ -360,7 +372,7 @@ function renderMain() {
   </div>
 
   <section class="card summary">
-    <div class="big"><div class="lbl">Current grade</div><div class="num" id="sumActual"></div>${c.skywardGrade ? `<div class="skyline">Skyward shows ${esc(c.skywardGrade)}${c.term ? ` (${esc(c.term)})` : ''}</div>` : ''}</div>
+    <div class="big"><div class="lbl">Current grade</div><div class="num" id="sumActual"></div>${skywardLine(c)}</div>
     <div class="big wi" id="wiBox"><div class="lbl">What-if grade</div><div class="num" id="sumWi"></div></div>
     <div class="controls">
       <label class="switch"><input type="checkbox" id="wiToggle" ${whatIf ? 'checked' : ''}> What-if mode</label>
@@ -462,7 +474,8 @@ function refreshNumbers() {
   renderSidebar();
   if (!c) return;
   const A = calc(c, false), P = calc(c, true);
-  $('#sumActual').innerHTML = gradeHTML(A.pct);
+  const sk = A.pct == null ? skyNum(c) : null;
+  $('#sumActual').innerHTML = sk != null ? gradeHTML(sk) + '<span class="small muted" style="font-size:14px;font-weight:500;margin-left:8px">from Skyward</span>' : gradeHTML(A.pct);
   const hasWi = c.assignments.some(a => a.hypo || a.wi != null);
   $('#wiBox').style.display = (whatIf || hasWi) ? '' : 'none';
   let diff = '';
@@ -758,7 +771,7 @@ function showSync() {
 const LOGIN_KEY = 'mygrades.login';
 const loadLogin = () => { try { return JSON.parse(localStorage.getItem(LOGIN_KEY)) || {}; } catch (e) { return {}; } };
 const saveLogin = o => { try { localStorage.setItem(LOGIN_KEY, JSON.stringify(o)); } catch (e) {} };
-let lastFailure = null;
+let lastFailure = null, lastNotes = null;
 
 function showServerStatus() {
   if (!serverMode) return;
@@ -772,10 +785,21 @@ function showServerStatus() {
     }
     if (f.pageHtml) h += `<p class="small"><a id="dlPage" href="#">Download a copy of that page</a> <span class="muted">(remove your name before sharing it)</span></p>`;
   }
+  if (!lastFailure && lastNotes && (lastNotes.notes || []).length) {
+    h += lastNotes.notes.map(n => `<p class="warnline">${esc(n)}</p>`).join('');
+    if (lastNotes.detailsHtml) h += `<p class="small"><a id="dlDetails" href="#">Download the details page</a> <span class="muted">(remove names before sharing it)</span></p>`;
+  }
   if (saved.password) h += `<p class="small muted">Login saved on this device${saved.username ? ' for ' + esc(saved.username) : ''}. <button class="ghost" id="forgetLogin">Forget it</button></p>`;
   box.innerHTML = h;
   const fl = $('#forgetLogin');
   if (fl) fl.onclick = () => { const s = loadLogin(); delete s.password; delete s.username; saveLogin(s); showServerStatus(); };
+  const dd = $('#dlDetails');
+  if (dd) dd.onclick = e => {
+    e.preventDefault();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([lastNotes.detailsHtml], { type: 'text/html' }));
+    a.download = 'skyward_details.html'; document.body.appendChild(a); a.click(); a.remove();
+  };
   const dl = $('#dlPage');
   if (dl) dl.onclick = e => {
     e.preventDefault();
@@ -839,7 +863,8 @@ async function doPull(login) {
     });
     const j = await r.json().catch(() => ({ ok: false, error: `Server error (${r.status}).` }));
     if (j.ok) {
-      sky = j.data; lastFailure = null; applySkyward();
+      sky = j.data; lastFailure = null; lastNotes = { notes: j.notes, detailsHtml: j.detailsHtml }; applySkyward();
+      if ((j.notes || []).length) $('#skyHelp').open = true;
       msg.textContent = `Updated ${sky.classes.length} class${sky.classes.length === 1 ? '' : 'es'}.`;
     } else {
       lastFailure = j;
