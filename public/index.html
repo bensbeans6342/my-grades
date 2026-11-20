@@ -552,7 +552,7 @@ function renderMain() {
     // In what-if mode the score box sets a temporary what-if score only.
     const score = whatIf
       ? `<input data-af="score" inputmode="decimal" value="${esc(a.wi != null ? a.wi : (a.score ?? ''))}" placeholder="—" aria-label="What-if score">`
-      : `<span class="ro">${esc(a.score ?? '—')}</span>`;
+      : `<span class="ro rscore">${esc(a.score ?? '—')}</span>`;
     return `<tr data-aid="${a.id}" class="${whatIf && a.wi != null ? 'changed' : ''}">
       <td><span class="ro">${esc(a.name)}</span></td>
       ${cats ? `<td><span class="ro lockedcat">${catName(a.cat)}</span></td>` : ''}
@@ -1463,7 +1463,7 @@ if (serverMode) {
 // ---------- incognito mode ----------
 // Each hidden grade is covered by a blurred, made-up number; the real one shows only when you click it.
 const INCOG_KEY = 'mygrades.incog';
-const MASKED = '.pill, .big .num, td.pct, .skyline, .result';
+const MASKED = '.pill, .big .num, td.pct, .skyline, .result, .rscore';
 const MASKED_INPUTS = 'input[data-af=score], input[data-gterm], #naScore';
 const incogOn = () => document.body.classList.contains('incog');
 const rnd = n => Math.floor(Math.random() * n);
