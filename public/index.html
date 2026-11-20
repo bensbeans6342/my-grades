@@ -230,6 +230,13 @@ function load() {
   return { classes: [], scale: DEFAULT_SCALE.map(x => ({...x})) };
 }
 function normalize(s) {
+  // One-time fix for classes pulled when category grades were mistaken for weights.
+  if (!s.weightsFixed) {
+    (s.classes || []).forEach(c => (c.categories || []).forEach(k => {
+      if (/major/i.test(k.name || '')) k.weight = 60; else if (/daily|minor/i.test(k.name || '')) k.weight = 40;
+    }));
+    s.weightsFixed = true;
+  }
   if (!Array.isArray(s.scale) || !s.scale.length) s.scale = DEFAULT_SCALE.map(x => ({...x}));
   s.classes.forEach(c => {
     c.id = c.id || uid();
@@ -1169,8 +1176,9 @@ function parseSkywardAssignments(html) {
     let name = cells[iName >= 0 ? iName : 1] || '';
     if (/segmentedBrowseParentRow/.test(tr.className)) {
       if (name) {
-        // Category rows can carry their weight, e.g. "Major (60%)" or "Major Weighted at 60.00%".
-        const wm = cells.join(' ').match(/(\d+(?:\.\d+)?)\s*%/);
+        // Only a percent that's labeled as a weight counts ("Weighted at 60%", "Weight: 60%").
+        // A plain percent on a category row is that category's grade, not its weight.
+        const wm = cells.join(' ').match(/weight(?:ed)?\s*(?:at|:|=)?\s*(\d+(?:\.\d+)?)\s*%/i);
         const clean = name.replace(/\s*[(\-–:,]?\s*(?:weighted\s*at\s*)?\d+(?:\.\d+)?\s*%\)?\s*$/i, '').trim() || name;
         current = { id: uid(), name: clean, weight: wm ? parseFloat(wm[1]) : null };
         categories.push(current);
@@ -1242,10 +1250,8 @@ async function finishDirect(j, login, quick) {
         const a = parseSkywardAssignments(det.html || '');
         if (!a.assignments.length) { unread.push(c.name); if (!detailsHtml && det.html) detailsHtml = det.html; }
         if (a.assignments.length || a.categories.length) {
-          // If Skyward didn't show the weights, use the usual Major 60% / Daily-Minor 40% split.
-          if (a.categories.length && a.categories.every(k => k.weight == null)) {
-            a.categories.forEach(k => { if (/major/i.test(k.name)) k.weight = 60; else if (/daily|minor/i.test(k.name)) k.weight = 40; });
-          }
+          // Major = 60%, Minor/Daily = 40% (the district's split). Other categories keep a labeled weight if Skyward gave one.
+          a.categories.forEach(k => { if (/major/i.test(k.name)) k.weight = 60; else if (/daily|minor/i.test(k.name)) k.weight = 40; });
           Object.assign(c, a, { mode: a.categories.length ? 'weighted' : 'points' });
           read++;
         }
