@@ -67,7 +67,9 @@ function setCookiesOf(res) {
 // ---------------------------------------------------------------- HTTP with manual redirects
 export class Session {
   constructor({ jar = new Jar(), limit = SUBREQUEST_LIMIT, log = () => {}, fetchImpl = fetch } = {}) {
-    this.jar = jar; this.count = 0; this.limit = limit; this.log = log; this.fetch = fetchImpl;
+    this.jar = jar; this.count = 0; this.limit = limit; this.log = log;
+    // Wrap fetch so it isn't called with `this` = Session (Workers throw "Illegal invocation").
+    this.fetch = (url, init) => fetchImpl(url, init);
   }
   async go(method, url, opts = {}) {
     let body = opts.form ? new URLSearchParams(opts.form).toString() : opts.body ?? null;
