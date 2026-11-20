@@ -1,6 +1,6 @@
 import { launch } from '@cloudflare/playwright';
 import { pullGrades } from './pull.js';
-import { signInAndOpenGrades, fetchDetails, DirectError } from './direct.js';
+import { signInAndOpenGrades, fetchDetails } from './direct.js';
 
 // Serves your grade page (from /public) and does one thing on request:
 // POST /api/pull with your ClassLink login -> signs in, reads Skyward, returns your grades.
@@ -51,28 +51,24 @@ function checkInput(b) {
 
 async function doPull(env, body) {
   const started = Date.now();
-  let fastNote;
-  // Fast path: plain requests, no browser (unless capturing or asked for the browser).
-  if (body?.capture !== true && body?.mode !== 'browser') {
-    const { cfg, error } = checkInput(body);
-    if (error) return { ok: false, error, elapsedMs: 0, browserMs: 0 };
-    const steps = [];
-    try {
-      const r = await signInAndOpenGrades({ url: cfg.url, username: cfg.username, password: cfg.password, log: m => steps.push(m) });
-      return { ok: true, mode: 'direct', grids: r.grids, session: r.session, steps, quick: cfg.quick,
-               pulledAt: new Date().toISOString(), elapsedMs: Date.now() - started, browserMs: 0 };
-    } catch (e) {
-      if (e instanceof DirectError && e.auth) return { ok: false, error: e.message, steps, elapsedMs: Date.now() - started, browserMs: 0 };
-      fastNote = `Fast sign-in stopped (${String(e.message || e).slice(0, 160)}${steps.length ? `; got as far as: ${steps[steps.length - 1]}` : ''}), so the browser was used.`;
-    }
+  // The browser is only used for the one-time "Capture sign-in" troubleshooting tool.
+  if (body?.capture === true) {
+    const result = await pullOnce(env, body);
+    result.mode = 'browser';
+    result.elapsedMs = result.browserMs = Date.now() - started;
+    return result;
   }
-  const t1 = Date.now();
-  const result = await pullOnce(env, body);
-  result.mode = 'browser';
-  result.elapsedMs = Date.now() - started;
-  result.browserMs = Date.now() - t1;   // lets the page keep track of today's free browser time
-  if (fastNote) result.fastNote = fastNote;
-  return result;
+  const { cfg, error } = checkInput(body);
+  if (error) return { ok: false, error, elapsedMs: 0, browserMs: 0 };
+  const steps = [];
+  try {
+    const r = await signInAndOpenGrades({ url: cfg.url, username: cfg.username, password: cfg.password, log: m => steps.push(m) });
+    return { ok: true, mode: 'direct', grids: r.grids, session: r.session, steps, quick: cfg.quick,
+             pulledAt: new Date().toISOString(), elapsedMs: Date.now() - started, browserMs: 0 };
+  } catch (e) {
+    const msg = String(e?.message || e).split('\n')[0].slice(0, 300);
+    return { ok: false, error: msg, steps, elapsedMs: Date.now() - started, browserMs: 0 };
+  }
 }
 
 async function doDetails(body) {
