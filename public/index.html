@@ -1013,7 +1013,10 @@ function openSignIn(opts = {}) {
     <label>ClassLink address<input name="classlinkUrl" required inputmode="url" placeholder="https://launchpad.classlink.com/yourdistrict" value="${esc(saved.classlinkUrl || '')}"></label>
     <label>ClassLink username<input name="username" autocomplete="username" required value="${esc(saved.username || '')}"></label>
     <label>ClassLink password<input name="password" type="password" autocomplete="current-password" required></label>
-    <details ${saved.gradesUrl || saved.term ? 'open' : ''}><summary class="small">More options</summary>
+    <details ${!saved.launchUrl || saved.gradesUrl || saved.term ? 'open' : ''}><summary class="small">More options</summary>
+      <label>Skyward link in ClassLink<input name="launchUrl" inputmode="url" placeholder="https://idp.classlink.com/sso/select/..." value="${esc(saved.launchUrl || '')}"></label>
+      <label>ClassLink code (if needed)<input name="tenantCode" placeholder="e.g. yourdistrict" value="${esc(saved.tenantCode || '')}"></label>
+      <label>Username domain (if needed)<input name="userDomain" placeholder="e.g. ad.yourdistrict.edu" value="${esc(saved.userDomain || '')}"></label>
       <label>Skyward grades page address (optional)<input name="gradesUrl" inputmode="url" placeholder="https://.../grading" value="${esc(saved.gradesUrl || '')}"></label>
       <label>Term (optional, e.g. Q2)<input name="term" value="${esc(saved.term || '')}"></label>
     </details>
@@ -1032,9 +1035,11 @@ function openSignIn(opts = {}) {
     let cl = f.classlinkUrl.value.trim();
     if (cl && !/^https?:\/\//i.test(cl)) cl = 'https://' + cl;
     const login = { classlinkUrl: cl, gradesUrl: f.gradesUrl.value.trim(), term: f.term.value.trim(),
+                    launchUrl: f.launchUrl.value.trim(), tenantCode: f.tenantCode.value.trim(), userDomain: f.userDomain.value.trim(),
                     username: f.username.value.trim(), password: f.password.value };
     if (f.remember.checked) saveLogin(login);
-    else saveLogin({ classlinkUrl: login.classlinkUrl, gradesUrl: login.gradesUrl, term: login.term });
+    else saveLogin({ classlinkUrl: login.classlinkUrl, gradesUrl: login.gradesUrl, term: login.term,
+                     launchUrl: login.launchUrl, tenantCode: login.tenantCode, userDomain: login.userDomain });
     ov.remove();
     if (opts.capture) doCapture(login); else doPull(login);
   };
@@ -1042,7 +1047,7 @@ function openSignIn(opts = {}) {
 
 function pullNow() {
   const s = loadLogin();
-  if (s.classlinkUrl && s.username && s.password) doPull(s); else openSignIn();
+  if (s.classlinkUrl && s.launchUrl && s.username && s.password) doPull(s); else openSignIn();
 }
 
 // ---------- talking to the Worker ----------
@@ -1062,6 +1067,7 @@ async function callPull(login, quick, capture) {
     const r = await fetch('api/pull', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ classlinkUrl: login.classlinkUrl, gradesUrl: login.gradesUrl || '', term: login.term || '',
+                             launchUrl: login.launchUrl || '', tenantCode: login.tenantCode || '', userDomain: login.userDomain || '',
                              username: login.username, password: login.password, quick: !!quick, capture: !!capture }),
     });
     j = await r.json().catch(() => ({ ok: false, error: `Server error (${r.status}).` }));
@@ -1224,7 +1230,7 @@ async function doPull(login) {
 // ---------- one-time capture of the sign-in requests (to build the no-browser version) ----------
 function captureNow() {
   const s = loadLogin();
-  if (s.classlinkUrl && s.username && s.password) doCapture(s); else openSignIn({ capture: true });
+  if (s.classlinkUrl && s.launchUrl && s.username && s.password) doCapture(s); else openSignIn({ capture: true });
 }
 async function doCapture(login) {
   if (pulling) return;

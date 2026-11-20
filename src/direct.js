@@ -13,12 +13,8 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const HTML_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
 const SUBREQUEST_LIMIT = 48;   // Cloudflare free plan: 50 outgoing requests per call
 
-// ClassLink address path → ClassLink tenant code, when they differ and the page doesn't say.
-const TENANT_CODES = { pisd: 'plano' };
-// District sign-in servers → the domain they put in front of the username.
-const ADFS_DOMAINS = { 'dirsync.pisd.edu': 'ad.pisd.edu' };
-// Known ClassLink launch links for Skyward, by tenant code (saves two requests).
-const SKYWARD_LAUNCH = { plano: 'https://idp.classlink.com/sso/select/YW9adUh6V2NONEk9' };
+// District-specific settings (ClassLink code, username domain, Skyward launch link) aren't kept in
+// this code. They're typed into the sign-in box and saved in your browser, then sent with each pull.
 
 export class DirectError extends Error {
   constructor(message, { auth = false, step = '' } = {}) { super(message); this.auth = auth; this.step = step; }
@@ -231,7 +227,7 @@ async function skywardXhr(s, sky, url, form, { accept = 'application/json, text/
 }
 
 // ---------------------------------------------------------------- 1 + 2: sign in, open Skyward
-export async function signInAndOpenGrades({ url, username, password, log = () => {}, fetchImpl }) {
+export async function signInAndOpenGrades({ url, username, password, tenantCode = '', userDomain = '', launchUrl = '', log = () => {}, fetchImpl }) {
   const s = new Session({ log, fetchImpl });
   const lp = new URL(url);
   const pathCode = lp.pathname.split('/').filter(Boolean)[0] || '';
@@ -239,7 +235,7 @@ export async function signInAndOpenGrades({ url, username, password, log = () =>
   // ClassLink login page (sets ClassLink cookies)
   const lpPage = await s.go('GET', lp.href);
   const codeMatch = lpPage.text.match(/authenticate\?code=([\w-]+)/) || lpPage.text.match(/["'](?:tenantCode|loginCode|customCode)["']\s*:\s*["']([\w-]+)["']/);
-  const code = (codeMatch && codeMatch[1]) || TENANT_CODES[pathCode.toLowerCase()] || pathCode;
+  const code = tenantCode || (codeMatch && codeMatch[1]) || pathCode;
   log('Opened ClassLink');
 
   // Network Login → district sign-in page
@@ -249,7 +245,7 @@ export async function signInAndOpenGrades({ url, username, password, log = () =>
   log('Chose Network Login');
 
   // Submit username + password. The district's sign-in page adds its domain (DOMAIN\user).
-  const domain = ADFS_DOMAINS[new URL(adfs.url).hostname.toLowerCase()] || '';
+  const domain = userDomain;
   const user = /[\\@]/.test(username) || !domain ? username : `${domain}\\${username}`;
   const fields = { ...loginForm.fields };
   fields[('UserName' in fields) ? 'UserName' : 'username'] = user;
@@ -269,8 +265,8 @@ export async function signInAndOpenGrades({ url, username, password, log = () =>
   await s.go(handoff.method, handoff.action, { form: handoff.fields, referer: after.url, stopAt: u => /myapps\.classlink\.com/.test(u) });
 
   // Open Skyward through ClassLink
-  const launch = SKYWARD_LAUNCH[code.toLowerCase()];
-  if (!launch) throw new DirectError('Fast sign-in doesn\'t know this district\'s Skyward link yet.', { step: 'launch' });
+  const launch = launchUrl;
+  if (!launch) throw new DirectError('Add your Skyward link in ClassLink in the sign-in box (More options).', { step: 'launch' });
   let page = await s.go('GET', launch, { referer: 'https://myapps.classlink.com/' });
   for (let i = 0; i < 4; i++) {   // ClassLink → Skyward hand-off, then Skyward's own same-site re-post
     const f = parseForms(page.text, page.url).find(x => 'SAMLResponse' in x.fields);

@@ -44,8 +44,17 @@ function checkInput(b) {
   if (gradesUrl) {
     try { if (new URL(gradesUrl).protocol !== 'https:') throw 0; } catch { return { error: 'The grades page address must start with https://' }; }
   }
+  const tenantCode = str(b?.tenantCode ?? '', 60), userDomain = str(b?.userDomain ?? '', 100), launchUrl = str(b?.launchUrl ?? '', 500);
+  if (tenantCode === null || userDomain === null || launchUrl === null) return { error: 'Bad request.' };
+  if (tenantCode && !/^[\w-]+$/.test(tenantCode)) return { error: 'The ClassLink code can only have letters, numbers, - and _.' };
+  if (userDomain && !/^[\w.-]+$/.test(userDomain)) return { error: "The username domain can only have letters, numbers, dots and dashes." };
+  if (launchUrl) {
+    let lu; try { lu = new URL(launchUrl); } catch { return { error: 'The Skyward link isn\'t a valid web address.' }; }
+    const lh = lu.hostname.toLowerCase();
+    if (lu.protocol !== 'https:' || !(lh === 'classlink.com' || lh.endsWith('.classlink.com'))) return { error: 'The Skyward link must be a classlink.com link (https://...classlink.com/...).' };
+  }
   if (gradesUrl === null || term === null) return { error: 'Bad request.' };
-  return { cfg: { url: cl.href, username, password, gradesUrl: gradesUrl || null, term: term || null,
+  return { cfg: { url: cl.href, username, password, gradesUrl: gradesUrl || null, term: term || null, tenantCode, userDomain, launchUrl,
                   quick: b.quick === true && b.capture !== true, capture: b.capture === true } };
 }
 
@@ -62,7 +71,8 @@ async function doPull(env, body) {
   if (error) return { ok: false, error, elapsedMs: 0, browserMs: 0 };
   const steps = [];
   try {
-    const r = await signInAndOpenGrades({ url: cfg.url, username: cfg.username, password: cfg.password, log: m => steps.push(m) });
+    const r = await signInAndOpenGrades({ url: cfg.url, username: cfg.username, password: cfg.password,
+      tenantCode: cfg.tenantCode, userDomain: cfg.userDomain, launchUrl: cfg.launchUrl, log: m => steps.push(m) });
     return { ok: true, mode: 'direct', grids: r.grids, session: r.session, steps, quick: cfg.quick,
              pulledAt: new Date().toISOString(), elapsedMs: Date.now() - started, browserMs: 0 };
   } catch (e) {

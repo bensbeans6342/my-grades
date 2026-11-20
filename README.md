@@ -53,7 +53,7 @@ Your grades stay in that browser. To use another device, use **Backup & data** >
 
 ## How pulls work
 
-Pulls sign in with plain web requests, the same ones a browser sends: ClassLink → Plano ISD's
+Pulls sign in with plain web requests, the same ones a browser sends: ClassLink → your district's
 sign-in (Network Login) → Skyward → Student Grades. A pull takes a few seconds. If a step fails,
 the pull stops and the page shows the error and how far it got. There's no browser fallback.
 
