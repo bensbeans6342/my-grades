@@ -108,8 +108,11 @@ input.gchanged{color:var(--wi);font-weight:700}
 .skyline{font-size:13px;color:var(--muted);margin-top:2px}
 code.k{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:0 4px}
 /* Incognito: hide grades until clicked */
-body.incog :is(.pill,.big .num,td.pct,.skyline,.result,input[data-af=score],input[data-gterm],#naScore):not(.peek){filter:blur(7px);color:var(--muted)!important;cursor:pointer;user-select:none}
-body.incog :is(.pill,.big .num,td.pct,.skyline,.result):not(.peek) *{color:inherit!important}
+body.incog .mask:not(.peek){position:relative;color:transparent!important;cursor:pointer;user-select:none}
+body.incog .mask:not(.peek) *{color:transparent!important}
+body.incog .mask:not(.peek)::after{content:attr(data-fake);position:absolute;inset:0;padding:inherit;display:flex;align-items:center;justify-content:flex-start;white-space:nowrap;overflow:hidden;color:var(--muted);filter:blur(4px);pointer-events:none}
+body.incog .mask.num:not(.peek)::after,body.incog .mask.pct:not(.peek)::after{justify-content:flex-end}
+body.incog .mask.pill:not(.peek)::after{justify-content:center}
 #incogBtn{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;color:var(--muted)}
 #incogBtn[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--card);font-weight:600}
 @media (max-width:640px){
@@ -1385,28 +1388,59 @@ if (serverMode) {
 }
 
 // ---------- incognito mode ----------
+// Each hidden grade is covered by a blurred, made-up number; the real one shows only when you click it.
 const INCOG_KEY = 'mygrades.incog';
-const MASKED = '.pill, .big .num, td.pct, .skyline, .result, input[data-af=score], input[data-gterm], #naScore';
+const MASKED = '.pill, .big .num, td.pct, .skyline, .result';
+const MASKED_INPUTS = 'input[data-af=score], input[data-gterm], #naScore';
+const incogOn = () => document.body.classList.contains('incog');
+const rnd = n => Math.floor(Math.random() * n);
+const fakeNum = m => {
+  const [i, d] = m.split('.');
+  const whole = i.length >= 2 ? String(55 + rnd(45)) : String(rnd(10));
+  return d ? whole + '.' + Array.from(d, () => rnd(10)).join('') : whole;
+};
+const fakeText = t => t.replace(/\d+(?:\.\d+)?/g, fakeNum).replace(/\b[A-F][+-]?(?![a-z])/g, () => 'ABCD'[rnd(4)]);
+const realOf = new WeakMap();
+function setFake(el, real) {
+  el.classList.add('mask');
+  if (realOf.get(el) === real && el.hasAttribute('data-fake')) return;
+  realOf.set(el, real);
+  el.setAttribute('data-fake', fakeText(real));
+}
+function scanMasks() {
+  if (!incogOn()) return;
+  document.querySelectorAll(MASKED).forEach(el => setFake(el, el.textContent));
+  document.querySelectorAll(MASKED_INPUTS).forEach(inp => {
+    const host = inp.parentElement; if (!host) return;
+    host.classList.add('inhost');
+    setFake(host, inp.value || '');
+  });
+}
+new MutationObserver(scanMasks).observe(document.body, { childList: true, subtree: true, characterData: true });
 function setIncog(on) {
   document.body.classList.toggle('incog', on);
   $('#incogBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
   $('#incogBtn').title = on ? 'Incognito is on: click to show all grades' : 'Incognito: hide all grades (click a grade to show it)';
   document.querySelectorAll('.peek').forEach(el => el.classList.remove('peek'));
+  scanMasks();
   try { localStorage.setItem(INCOG_KEY, on ? '1' : ''); } catch (e) {}
 }
-$('#incogBtn').addEventListener('click', () => setIncog(!document.body.classList.contains('incog')));
-// While incognito, the first click on a hidden grade only shows it; clicking it again hides it.
+$('#incogBtn').addEventListener('click', () => setIncog(!incogOn()));
+// First click on a hidden grade shows the real one; clicking it again hides it.
 // Score boxes stay shown while you edit them and hide again when you click away.
 document.addEventListener('click', e => {
-  if (!document.body.classList.contains('incog')) return;
-  const el = e.target.closest(MASKED);
-  if (!el) return;
-  if (el.matches('input')) { if (!el.classList.contains('peek')) { el.classList.add('peek'); e.stopPropagation(); } return; }
+  if (!incogOn()) return;
+  const host = e.target.closest('.mask');
+  if (!host) return;
+  if (host.classList.contains('inhost')) {
+    if (!host.classList.contains('peek')) { host.classList.add('peek'); host.querySelector('input')?.focus(); e.stopPropagation(); }
+    return;
+  }
   e.preventDefault(); e.stopPropagation();
-  el.classList.toggle('peek');
+  host.classList.toggle('peek');
 }, true);
-document.addEventListener('focusout', e => { if (e.target.matches && e.target.matches('input.peek')) e.target.classList.remove('peek'); });
-document.addEventListener('focusin', e => { if (document.body.classList.contains('incog') && e.target.matches && e.target.matches(MASKED)) e.target.classList.add('peek'); });
+document.addEventListener('focusin', e => { const h = e.target.closest && e.target.closest('.inhost'); if (h && incogOn()) h.classList.add('peek'); });
+document.addEventListener('focusout', e => { const h = e.target.closest && e.target.closest('.inhost'); if (h) { h.classList.remove('peek'); scanMasks(); } });
 try { if (localStorage.getItem(INCOG_KEY)) setIncog(true); } catch (e) {}
 
 renderAll();
