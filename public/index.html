@@ -107,6 +107,10 @@ input.gchanged{color:var(--wi);font-weight:700}
 .signin summary{cursor:pointer;color:var(--muted);margin-bottom:8px}
 .skyline{font-size:13px;color:var(--muted);margin-top:2px}
 code.k{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:0 4px}
+/* Incognito: hide grades until clicked */
+body.incog :is(.pill,.big .num,td.pct,.skyline,.result,input[data-af=score],input[data-gterm],#naScore):not(.peek){filter:blur(7px);color:var(--muted)!important;cursor:pointer;user-select:none}
+body.incog :is(.pill,.big .num,td.pct,.skyline,.result):not(.peek) *{color:inherit!important}
+#incogBtn[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--card);font-weight:600}
 @media (max-width:640px){
   header .note{display:none}
   .card{overflow-x:auto;padding:14px}
@@ -123,6 +127,7 @@ code.k{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;backgr
   <span class="note" id="hdrNote">Runs in your browser. No server. Your data stays on this device.</span>
   <span style="flex:1"></span>
   <span class="small muted" id="pullMsg"></span>
+  <button id="incogBtn" aria-pressed="false" title="Hide all grades. Click a grade to show it.">Incognito</button>
   <button class="primary" id="pullBtn" hidden>Pull from Skyward</button>
 </header>
 <div class="sync" id="syncBanner" hidden></div>
@@ -1377,6 +1382,31 @@ if (serverMode) {
     scheduleAuto(since > 15 * 60 * 1000 ? 10000 : 15 * 60 * 1000 - since);
   }
 }
+
+// ---------- incognito mode ----------
+const INCOG_KEY = 'mygrades.incog';
+const MASKED = '.pill, .big .num, td.pct, .skyline, .result, input[data-af=score], input[data-gterm], #naScore';
+function setIncog(on) {
+  document.body.classList.toggle('incog', on);
+  $('#incogBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
+  $('#incogBtn').textContent = on ? 'Incognito on' : 'Incognito';
+  document.querySelectorAll('.peek').forEach(el => el.classList.remove('peek'));
+  try { localStorage.setItem(INCOG_KEY, on ? '1' : ''); } catch (e) {}
+}
+$('#incogBtn').addEventListener('click', () => setIncog(!document.body.classList.contains('incog')));
+// While incognito, the first click on a hidden grade only shows it; clicking it again hides it.
+// Score boxes stay shown while you edit them and hide again when you click away.
+document.addEventListener('click', e => {
+  if (!document.body.classList.contains('incog')) return;
+  const el = e.target.closest(MASKED);
+  if (!el) return;
+  if (el.matches('input')) { if (!el.classList.contains('peek')) { el.classList.add('peek'); e.stopPropagation(); } return; }
+  e.preventDefault(); e.stopPropagation();
+  el.classList.toggle('peek');
+}, true);
+document.addEventListener('focusout', e => { if (e.target.matches && e.target.matches('input.peek')) e.target.classList.remove('peek'); });
+document.addEventListener('focusin', e => { if (document.body.classList.contains('incog') && e.target.matches && e.target.matches(MASKED)) e.target.classList.add('peek'); });
+try { if (localStorage.getItem(INCOG_KEY)) setIncog(true); } catch (e) {}
 
 renderAll();
 if (sky && Array.isArray(sky.classes) && sky.classes.length && !state.classes.length && sky.pulledAt !== state.lastPulled) applySkyward();
