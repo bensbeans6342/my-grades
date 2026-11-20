@@ -35,6 +35,12 @@ There are no secrets, variables or storage to set up.
      You can also pick a term like `NW1` (default: the current, highlighted term).
 3. Wait about a minute. Your classes appear on the left.
 
+**GPA calculator** (top of the class list): semester GPA using the district's rules.
+Each grading period is Major 60% / Daily-Minor 40%; each semester is Period 1 40% +
+Period 2 40% + Semester exam 20%, looked up on the Level 3 / 2 / 1 scale. Levels are
+guessed from class names (AP = 3, GT/Honors = 2) and can be changed. Type in any grade,
+like a semester exam score, to see how it changes the GPA.
+
 Your grades stay in that browser. To use another device, use **Backup & data** >
 **Export backup** and **Import backup**, or just pull again there.
 
