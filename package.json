@@ -1,0 +1,11 @@
+{
+  "name": "my-grades",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cloudflare/playwright": "latest"
+  },
+  "devDependencies": {
+    "wrangler": "latest"
+  }
+}
