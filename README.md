@@ -35,6 +35,13 @@ There are no secrets, variables or storage to set up.
      You can also pick a term like `NW1` (default: the current, highlighted term).
 3. Wait about a minute. Your classes appear on the left.
 
+**Automatic checks**: in **Update from Skyward**, tick **Check for new grades every
+15–20 minutes while this page is open** (needs **Remember my login**). Each check signs in
+and reads only the grades table (about 30–40 seconds); when something changes it fetches
+the assignment details and shows a notification. Checks only run while the page is open in
+a browser tab, because your login isn't stored on Cloudflare. They pause before the free
+10 minutes a day of browser time runs out, and stop after 3 failed checks in a row.
+
 **GPA calculator** (top of the class list): semester GPA using the district's rules.
 Each grading period is Major 60% / Daily-Minor 40%; each semester is Period 1 40% +
 Period 2 40% + Semester exam 20%, looked up on the Level 3 / 2 / 1 scale. Levels are
@@ -43,6 +50,17 @@ like a semester exam score, to see how it changes the GPA.
 
 Your grades stay in that browser. To use another device, use **Backup & data** >
 **Export backup** and **Import backup**, or just pull again there.
+
+## How pulls work
+
+Pulls sign in with plain web requests, the same ones a browser sends: ClassLink → Plano ISD's
+sign-in (Network Login) → Skyward → Student Grades. A pull takes a few seconds and doesn't use
+Cloudflare's browser time. If that fast sign-in ever fails for a reason other than a wrong
+password (for example ClassLink or Skyward changed something), the pull automatically falls back
+to a real browser on Cloudflare (Browser Rendering, 10 free minutes a day), and the page says so.
+
+**Troubleshooting → Capture sign-in** records one sign-in (password, login, cookies and sign-in
+tokens removed) so a broken fast sign-in can be fixed.
 
 ## If a pull fails
 
@@ -78,6 +96,8 @@ screenshot of what the browser saw.
 
 - `public/index.html`: the grade page
 - `src/index.js`: the Worker (serves the page, handles **Pull from Skyward**)
-- `src/pull.js`: signs in to ClassLink, opens Skyward's grades, and reads classic Gradebook
+- `src/direct.js`: the fast sign-in with plain requests (ClassLink, district sign-in, Skyward)
+- `src/pull.js`: browser fallback: signs in with a real browser and reads the grades
 - `src/qmlativ.js`: reads Skyward's newer **Student Grades** page
+- `src/capture.js`: the one-time capture, with secrets removed
 - `wrangler.jsonc`: Cloudflare settings
