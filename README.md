@@ -53,8 +53,9 @@ a browser tab, because your login isn't stored on Cloudflare. They pause before 
 district's rules. **Ranking GPA** is weighted (Distinguished 5.0 / Honors 4.5 / Regular 4.0) and
 counts only core classes: math, science, history/social studies and English. **Cumulative GPA** is
 unweighted (4.0 scale) and counts every class. Each grading period is Major 60% / Daily-Minor 40%;
-each semester is Period 1 40% + Period 2 40% + Semester exam 20%. Levels and core classes are
-guessed from class names and can be changed. Type in any grade, like a semester exam score, to see
+each semester is Period 1 40% + Period 2 40% + Semester exam 20%. Levels and core classes come from Plano ISD's
+Academic Planning Guide (classes of 2030 & 2031); classes not found there are marked **guessed**.
+Either can be changed. Type in any grade, like a semester exam score, to see
 how it changes both GPAs.
 
 Your grades stay in that browser. To use another device, use **Backup & data** >
