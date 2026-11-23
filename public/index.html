@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>My Grades</title>
+<link rel="icon" id="favicon" href="favicon.svg" type="image/svg+xml">
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--ink:#16181d;--muted:#667085;--line:#e3e6eb;--accent:#be185d;--accent-ink:#fff;--chip:#fdf2f8;--good:#12805c;--ok:#16181d;--warn:#b54708;--bad:#c4320a;--wi:#6e4ff6;--wi-bg:#f4f1ff}
 @media (prefers-color-scheme:dark){:root{--bg:#0e1014;--card:#161920;--ink:#e8eaf0;--muted:#98a2b3;--line:#282d38;--accent:#f472b6;--accent-ink:#0e1014;--chip:#2a1622;--good:#32d583;--ok:#e8eaf0;--warn:#fdb022;--bad:#f97066;--wi:#a492ff;--wi-bg:#1d1a2e}}
@@ -596,7 +597,28 @@ function refreshGPA() {
 }
 
 // ---------- rendering ----------
+// ---------- favicon: the letter for your overall grade ----------
+// Average of every class's grade, turned into a letter with your grading scale. Shows the plain
+// logo on the home screen, with no grades yet, or in incognito mode.
+const ICON_COLORS = { good: '#12805c', ok: '#475467', warn: '#b54708', bad: '#c4320a' };
+let iconKey = '';
+function updateFavicon() {
+  const link = document.getElementById('favicon'); if (!link) return;
+  const ps = state.classes.map(shownPct).filter(p => p != null);
+  const avg = ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : null;
+  const hide = avg == null || document.body.classList.contains('incog') || document.body.classList.contains('home');
+  const L = hide ? '' : letter(avg);
+  const key = L ? L + tone(avg) : '';
+  if (key === iconKey) return;
+  iconKey = key;
+  if (!L) { link.href = 'favicon.svg'; return; }
+  const size = L.length > 1 ? 34 : 44;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${ICON_COLORS[tone(avg)] || ICON_COLORS.ok}"/><text x="32" y="${L.length > 1 ? 45 : 48}" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="${size}" font-weight="800" fill="#fff">${esc(L)}</text></svg>`;
+  link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+
 function renderSidebar() {
+  updateFavicon();
   const ul = $('#classlist');
   const gs = state.classes.length ? gpaSummary() : null;
   const gpaLi = state.classes.length ? `<li data-id="${GPA_ID}" class="${currentId === GPA_ID ? 'active' : ''}"><span class="nm"><b>GPA calculator</b></span><span class="pill">${gs && gs.overall != null ? gs.overall.toFixed(2) : '—'}</span></li>` : '';
@@ -635,6 +657,7 @@ function updateChrome() {
   $('#demoBanner').hidden = !demo;
   $('#signOutBtn').hidden = home || demo || !state.classes.length;
   if (!home) maybeTour();
+  updateFavicon();
   return home;
 }
 function enterDemo() {
@@ -1702,6 +1725,7 @@ function setIncog(on) {
   document.querySelectorAll('.peek').forEach(el => el.classList.remove('peek'));
   scanMasks();
   try { localStorage.setItem(INCOG_KEY, on ? '1' : ''); } catch (e) {}
+  updateFavicon();
 }
 $('#incogBtn').addEventListener('click', () => setIncog(!incogOn()));
 // First click on a hidden grade shows the real one; clicking it again hides it.
