@@ -89,7 +89,7 @@ async function doPull(env, body) {
   try {
     const r = await signInAndOpenGrades({ url: cfg.url, username: cfg.username, password: cfg.password,
       tenantCode: cfg.tenantCode, userDomain: cfg.userDomain, launchUrl: cfg.launchUrl, log: m => steps.push(m) });
-    return { ok: true, mode: 'direct', grids: r.grids, session: r.session, steps, quick: cfg.quick,
+    return { ok: true, mode: 'direct', grids: r.grids, student: r.student, session: r.session, steps, quick: cfg.quick,
              pulledAt: new Date().toISOString(), elapsedMs: Date.now() - started, browserMs: 0 };
   } catch (e) {
     const msg = String(e?.message || e).split('\n')[0].slice(0, 300);

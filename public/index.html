@@ -548,18 +548,39 @@ const CORE_RE = [
 const guessCore = name => !/computer science/i.test(name || '') && CORE_RE.some(re => re.test(name || ''));
 const coreDefault = c => { const i = courseInfo(c.name); return i ? i.rank : guessCore(c.name); };
 const isCore = c => (c.gpa && typeof c.gpa.core === 'boolean' ? c.gpa.core : coreDefault(c));
+// ---------- grade level and which year's rules apply ----------
+const STUDENT_OK = st => !!(st && (st.gradeLevel || st.gradYear));
+// School years run August to May: in Nov 2026 a senior is in the class of 2027.
+const springYear = () => { const d = new Date(); return d.getFullYear() + (d.getMonth() >= 7 ? 1 : 0); };
+function studentInfo() {
+  const ov = state.studentOv || {};
+  const st = state.student || {};
+  const gradeLevel = ov.gradeLevel || st.gradeLevel || null;
+  let gradYear = ov.gradeLevel ? null : st.gradYear || null;
+  if (!gradYear && gradeLevel) gradYear = springYear() + (12 - gradeLevel);
+  const source = ov.gradeLevel ? 'you' : STUDENT_OK(state.student) ? 'Skyward' : null;
+  // Plano ISD's Academic Planning Guides: one for the classes of 2028 & 2029, one for 2030 & 2031.
+  const rules = !gradYear ? null : gradYear <= 2029 ? '2029' : '2031';
+  return { gradeLevel, gradYear, source, rules };
+}
+const RULES = {
+  '2029': { name: 'Classes of 2028 & 2029', notCum: /\b(e ?school|online)\b/i },
+  '2031': { name: 'Classes of 2030 & 2031', notCum: null },
+};
+
 // Two GPAs, each by semester and overall:
 //  - ranking: weighted (5.0 / 4.5 / 4.0 by level), core classes only
 //  - cumulative: unweighted (4.0 scale), every class that counts
 function gpaSummary() {
   const blank = () => SEMS.map(() => ({ pts: 0, n: 0 }));
   const rank = blank(), cum = blank();
+  const rule = RULES[studentInfo().rules];
   state.classes.forEach(c => {
     const lv = levelOf(c); if (!lv) return;
     const core = isCore(c);
     SEMS.forEach((sem, i) => {
       const g = semGrade(c, sem); if (!g) return;
-      cum[i].pts += gpaPoints(g.avg, 1); cum[i].n++;
+      if (!(rule && rule.notCum && rule.notCum.test(c.name))) { cum[i].pts += gpaPoints(g.avg, 1); cum[i].n++; }
       if (core) { rank[i].pts += gpaPoints(g.avg, lv); rank[i].n++; }
     });
   });
@@ -599,6 +620,7 @@ function renderGPA() {
     <div class="big"><div class="lbl">Ranking GPA <span class="small">(weighted, core classes)</span></div><div class="num" id="gpaRank"></div><div class="skyline" id="gpaRankSems"></div></div>
     <div class="big"><div class="lbl">Cumulative GPA <span class="small">(unweighted, all classes)</span></div><div class="num" id="gpaCum"></div><div class="skyline" id="gpaCumSems"></div></div>
   </section>
+  <section class="card" id="studentBox"></section>
   <p class="small muted" style="margin:-6px 2px 14px">Grades are filled in from Skyward. If you've tried what-if scores in a class, its current period uses that what-if grade instead. Change any of them to see what happens. Changed ones are purple.</p>
   ${SEMS.map(semTable).join('')}
   <details class="card">
@@ -622,9 +644,25 @@ function renderGPA() {
   </details>`;
   refreshGPA();
 }
+function renderStudentBox() {
+  const box = $('#studentBox'); if (!box) return;
+  const st = studentInfo(), sk = state.student || {};
+  const auto = sk.gradeLevel ? `From Skyward (grade ${sk.gradeLevel})` : sk.gradYear ? `From Skyward (class of ${sk.gradYear})` : 'Not set';
+  const opts = [`<option value="">${esc(auto)}</option>`, ...[9, 10, 11, 12].map(g => `<option value="${g}" ${state.studentOv?.gradeLevel === g ? 'selected' : ''}>Grade ${g}</option>`)].join('');
+  const notes = [];
+  if (st.rules) notes.push(`Using Plano ISD's Academic Planning Guide for the <b>${RULES[st.rules].name}</b>${st.gradYear < 2028 ? ' (the closest guide to the class of ' + st.gradYear + ')' : ''}.`);
+  if (st.rules === '2029') notes.push("Under these rules, online, eSchool and summer courses don't count toward the cumulative GPA. Classes with eSchool or Online in their name are left out of it; others taken that way can't be told apart here. Only the top 10% get a class rank on their transcript.");
+  if (st.gradeLevel && st.gradeLevel < 11) notes.push('The district first calculates the ranking GPA in the fall of 11th grade. Until then, this is a preview.');
+  if (!st.gradeLevel && !st.gradYear) notes.push("Skyward didn't show a grade level on the last pull. Pick one so the right year's rules are used.");
+  box.innerHTML = `<div class="row" style="justify-content:space-between">
+      <div><b>${st.gradeLevel ? 'Grade ' + st.gradeLevel : 'Grade level unknown'}</b>${st.gradYear ? ` · Class of ${st.gradYear}` : ''}${st.source ? ` <span class="muted small">· ${st.source === 'you' ? 'set by you' : 'from Skyward'}</span>` : ''}</div>
+      <label class="small muted row" style="gap:6px">Grade level <select id="gradeSel" aria-label="Grade level">${opts}</select></label>
+    </div>${notes.map(n => `<p class="small muted" style="margin:8px 0 0">${n}</p>`).join('')}`;
+}
 function refreshGPA() {
   renderSidebar();
   if (currentId !== GPA_ID) return;
+  renderStudentBox();
   const sum = gpaSummary();
   const semLine = r => SEMS.map((sem, i) => `${sem.name}: ${fmtGpa(r.sems[i])}`).join(' · ');
   $('#gpaRank').textContent = fmtGpa(sum.rank.overall);
@@ -647,7 +685,9 @@ function refreshGPA() {
       cell.className = 'num pct ' + tone(g.avg);
       pts.textContent = lv && isCore(c) ? gpaPoints(g.avg, lv).toFixed(1) : '—';
       pts.title = !lv ? "Doesn't count" : isCore(c) ? '' : 'Not a core class, so not in the ranking GPA';
-      cum.textContent = lv ? gpaPoints(g.avg, 1).toFixed(1) : '—';
+      const rule = RULES[studentInfo().rules], outCum = !!(rule && rule.notCum && rule.notCum.test(c.name));
+      cum.textContent = lv && !outCum ? gpaPoints(g.avg, 1).toFixed(1) : '—';
+      cum.title = outCum ? "Online and eSchool courses don't count toward the cumulative GPA under these rules" : '';
     });
     tr.classList.toggle('excl', !lv);
   });
@@ -756,6 +796,7 @@ function sampleState() {
       [['Oral presentation', 97, 100], ['Capítulo 3 test', 92, 100]],
       [['Vocab quiz', 19, 20], ['Workbook pages', 10, 10]]),
   ] });
+  s.student = { gradeLevel: 10, gradYear: null };
   s.classes.forEach(c => {
     const p = String(Math.round(calc(c, false).pct));
     c.termGrades = [{ label: 'NW1', grade: String(c.nw1) }, { label: 'NW2', grade: p, current: true }];
@@ -1059,6 +1100,10 @@ main.addEventListener('input', e => {
 main.addEventListener('change', e => {
   if (currentId === GPA_ID) {
     const t = e.target, tr = t.closest('tr[data-gcid]');
+    if (t.id === 'gradeSel') {
+      if (t.value) state.studentOv = { gradeLevel: +t.value }; else delete state.studentOv;
+      save(); refreshGPA(); return;
+    }
     if (tr && t.hasAttribute('data-gcore')) {
       const c = state.classes.find(x => x.id === tr.dataset.gcid); if (!c) return;
       c.gpa = c.gpa || {};
@@ -1178,6 +1223,7 @@ function applySkyward() {
     else state.classes.push(fresh);
   });
   state.lastPulled = sky.pulledAt;
+  if (STUDENT_OK(sky.student)) state.student = { gradeLevel: sky.student.gradeLevel || null, gradYear: sky.student.gradYear || null, at: sky.pulledAt };
   if (!cur() && currentId !== GPA_ID) currentId = state.classes[0]?.id ?? null;
   whatIf = false; pending = null;
   save(); renderAll(); showSync();
@@ -1486,7 +1532,7 @@ async function finishDirect(j, login, quick) {
   }
   return {
     ok: true, mode: 'direct', quick: !!quick, notes, detailsHtml, steps: [...(j.steps || []), quick ? 'Quick check: grades table only' : `Read assignments for ${read} of ${cells.length} classes`],
-    data: { server: true, pulledAt: j.pulledAt || new Date().toISOString(), classes },
+    data: { server: true, pulledAt: j.pulledAt || new Date().toISOString(), classes, student: j.student || null },
     elapsedMs: j.elapsedMs, browserMs: 0,
   };
 }
@@ -1609,6 +1655,7 @@ function applyQuick(data) {
     else state.classes.push(normalize({ classes: [JSON.parse(JSON.stringify(nc))] }).classes[0]);
   }
   state.lastPulled = data.pulledAt;
+  if (STUDENT_OK(data.student)) state.student = { gradeLevel: data.student.gradeLevel || null, gradYear: data.student.gradYear || null, at: data.pulledAt };
   save(); renderAll(); showSync();
 }
 

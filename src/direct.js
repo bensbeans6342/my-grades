@@ -227,6 +227,33 @@ async function skywardXhr(s, sky, url, form, { accept = 'application/json, text/
 }
 
 // ---------------------------------------------------------------- 1 + 2: sign in, open Skyward
+// The student's grade level (9-12) and graduation year, read from what Skyward already sent: the
+// home page, the Student Grades page and the grades table. Skyward shows them in its student header
+// and keeps them in the page's data. Only these numbers are kept, nothing else from the page.
+export function findStudentInfo(texts) {
+  const out = { gradeLevel: null, gradYear: null, from: null };
+  const level = v => { const n = parseInt(v, 10); return n >= 6 && n <= 12 ? n : null; };
+  const LEVEL = [
+    [/["']?Grade_?Level(?:Code|Number|Description|Key|Name)?["']?\s*[:=]\s*["']?\s*(?:Grade\s*)?0?(\d{1,2})\b/i, 'data'],
+    [/\bGrade\s*Level\s*[:\-]?\s*(?:<[^>]*>\s*)*0?(\d{1,2})\b/i, 'label'],
+    [/\bGrade\s*[:\-]\s*(?:<[^>]*>\s*)*0?(\d{1,2})\b/i, 'label'],
+    [/\(\s*Grade\s*0?(\d{1,2})\s*\)/i, 'header'],
+    [/\b(\d{1,2})(?:st|nd|rd|th)\s+Grade\b/i, 'header'],
+    [/>\s*Grade\s+0?(\d{1,2})\s*</i, 'header'],
+  ];
+  const YEAR = [
+    /["']?(?:Graduation|Grad|Cohort)_?Year["']?\s*[:=]\s*["']?(20\d\d)/i,
+    /\b(?:Graduation|Grad|Cohort)\s*Year\s*[:\-]?\s*(?:<[^>]*>\s*)*(20\d\d)\b/i,
+    /\bClass\s+of\s+(20\d\d)\b/i,
+  ];
+  for (const t of texts) {
+    if (typeof t !== 'string' || !t) continue;
+    if (out.gradeLevel == null) for (const [re, kind] of LEVEL) { const m = t.match(re); const v = m && level(m[1]); if (v) { out.gradeLevel = v; out.from = kind; break; } }
+    if (out.gradYear == null) for (const re of YEAR) { const m = t.match(re); if (m) { out.gradYear = +m[1]; break; } }
+  }
+  return out;
+}
+
 export async function signInAndOpenGrades({ url, username, password, tenantCode = '', userDomain = '', launchUrl = '', log = () => {}, fetchImpl }) {
   const s = new Session({ log, fetchImpl });
   const lp = new URL(url);
@@ -300,7 +327,11 @@ export async function signInAndOpenGrades({ url, username, password, tenantCode 
     if (j.html) grids.push(j.html);
   }
   log(`Read the grades table (${grids.length} list${grids.length === 1 ? '' : 's'})`);
-  return { grids, session: { jar: s.jar.only('skyward').list, sky }, requests: s.count };
+  const student = findStudentInfo([grades.text, page.text, ...grids]);
+  log(student.gradeLevel || student.gradYear
+    ? `Found the student's ${[student.gradeLevel && 'grade level (' + student.gradeLevel + ')', student.gradYear && 'graduation year (' + student.gradYear + ')'].filter(Boolean).join(' and ')}`
+    : "Couldn't find the student's grade level on the grades page");
+  return { grids, student, session: { jar: s.jar.only('skyward').list, sky }, requests: s.count };
 }
 
 // ---------------------------------------------------------------- 4: assignments for some classes
