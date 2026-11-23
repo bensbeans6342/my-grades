@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Privacy policy · My Grades</title>
+<link rel="stylesheet" href="legal.css">
+</head>
+<body>
+<nav><a class="brand" href="./"><i aria-hidden="true">A+</i>My Grades</a><a href="terms.html">Terms of service</a></nav>
+<main>
+<h1>Privacy policy</h1>
+<p class="meta">Effective November 23, 2026</p>
+
+<div class="callout"><b>The short version:</b> your grades and settings are stored only in your own browser's local storage and nowhere else. There's no account, no database and no tracking. Your ClassLink password is used only to sign in for the pull you start, and it's never saved on the server.</div>
+
+<h2>Who runs this</h2>
+<p>My Grades is a small personal project, not a company. It isn't made by or affiliated with Skyward, ClassLink or any school district. All of its code is public on <a href="https://github.com/bensbeans6342/my-grades/">GitHub</a>, so you can check everything this page says.</p>
+
+<h2>What's stored, and where</h2>
+<p>Everything is kept in your browser's <b>local storage</b> on the device you're using. Nothing is stored on our server or anywhere else. That includes:</p>
+<ul>
+  <li><b>Your grades:</b> classes, assignments, scores, category weights, what-if scores and GPA settings.</li>
+  <li><b>Your sign-in settings:</b> your district's ClassLink address and related options, so you don't have to type them each time.</li>
+  <li><b>Your login, only if you choose it:</b> if you tick <b>Remember my login on this device</b>, your ClassLink username and password are saved in local storage, <b>unencrypted</b>. Anyone who can use that browser could find them, so only do this on a device that's yours.</li>
+  <li><b>Page preferences:</b> whether you've seen the tutorial, whether incognito mode is on, whether automatic checks are on, and how much of the free daily browser time the troubleshooting tool has used.</li>
+</ul>
+<p>The <b>sample student</b> is made up and is never saved.</p>
+
+<h2>What happens when you pull your grades</h2>
+<p>When you click <b>Sign in</b> or <b>Pull from Skyward</b>, your browser sends your ClassLink username, password and sign-in settings over an encrypted (HTTPS) connection to this site's server, a Cloudflare Worker. The Worker uses them to sign in to ClassLink and Skyward on your behalf, the same way your browser would, and sends the grades back to your browser. The Worker then forgets everything:</p>
+<ul>
+  <li>It doesn't save your login, your grades or the Skyward session anywhere.</li>
+  <li>Its request logging is turned off, so what you send isn't written to logs.</li>
+  <li>It only signs in to <code>classlink.com</code> addresses and the Skyward site that ClassLink opens.</li>
+</ul>
+<p>While a pull is running, the Skyward sign-in session is passed between your browser and the Worker so it can read each class's assignments. It's kept only in the open page's memory and is gone when you close or reload the page.</p>
+
+<h2>Automatic checks</h2>
+<p>If you turn on <b>Check for new grades every 15 to 20 minutes</b>, the open page does a pull on a timer using your saved login. It only runs while the page is open in your browser. If you allow notifications, your browser shows one when a grade changes; that notification is created on your device.</p>
+
+<h2>Troubleshooting capture</h2>
+<p>The <b>Capture sign-in</b> button records one sign-in so a broken sign-in can be fixed. Your password, username, cookies and sign-in tokens are removed, and the file is downloaded to your device. It isn't sent anywhere. It does contain grades, so look it over before you share it with anyone.</p>
+
+<h2 id="cookies">Cookies</h2>
+<p><b>This site doesn't use cookies.</b> It doesn't set any cookies of its own, and there are no analytics, ads, trackers or third-party scripts. Instead, it uses your browser's local storage, described above, only to make the page work. Because nothing is used for tracking, there's no cookie banner to accept.</p>
+<p>When the Worker signs in to ClassLink and Skyward for you, those sites send their usual sign-in cookies. The Worker holds them only for that pull, as described above; they aren't stored in your browser or on the server.</p>
+
+<h2>Other services involved</h2>
+<ul>
+  <li><b>Cloudflare</b> hosts the page and runs the Worker. Like any web host, it handles basic network information such as your IP address to deliver the page. See <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's privacy policy</a>.</li>
+  <li><b>ClassLink and Skyward</b> are your school district's systems. Signing in through this page is the same as signing in to them yourself, and their own and your district's policies apply to that.</li>
+</ul>
+<p>Nothing is sold or shared with anyone else.</p>
+
+<h2>Students and parents</h2>
+<p>This tool is meant for students and their parents or guardians to look at the student's own grades. It doesn't collect any information for itself. Everything stays on the device being used, so a parent or guardian can see exactly what's stored and remove it at any time.</p>
+
+<h2>Removing your data</h2>
+<ul>
+  <li><b>Sign out</b> (top right) forgets your login and erases your grades from this browser.</li>
+  <li><b>Backup &amp; data</b> &gt; <b>Erase everything</b> removes your grades. <b>Forget it</b> under <b>Update from Skyward</b> removes a saved login.</li>
+  <li>Clearing your browser's site data for this page removes everything.</li>
+</ul>
+<p>Exported backup files are saved wherever you put them on your device. Delete them like any other file.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version will be posted here with a new effective date. You can see every past version in the project's history on <a href="https://github.com/bensbeans6342/my-grades/commits/main/public/privacy.html">GitHub</a>.</p>
+
+<h2>Questions</h2>
+<p>Open an issue on the <a href="https://github.com/bensbeans6342/my-grades/issues">GitHub project</a>.</p>
+</main>
+<footer><a href="./">Home</a><a href="terms.html">Terms of service</a></footer>
+</body>
+</html>
