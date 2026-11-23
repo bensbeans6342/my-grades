@@ -49,11 +49,13 @@ the assignment details and shows a notification. Checks only run while the page 
 a browser tab, because your login isn't stored on Cloudflare. They pause before the free
 10 minutes a day of browser time runs out, and stop after 3 failed checks in a row.
 
-**GPA calculator** (top of the class list): semester GPA using the district's rules.
-Each grading period is Major 60% / Daily-Minor 40%; each semester is Period 1 40% +
-Period 2 40% + Semester exam 20%, looked up on the Level 3 / 2 / 1 scale. Levels are
-guessed from class names (AP = 3, GT/Honors = 2) and can be changed. Type in any grade,
-like a semester exam score, to see how it changes the GPA.
+**GPA calculator** (top of the class list): two GPAs, by semester and overall, using the
+district's rules. **Ranking GPA** is weighted (Distinguished 5.0 / Honors 4.5 / Regular 4.0) and
+counts only core classes: math, science, history/social studies and English. **Cumulative GPA** is
+unweighted (4.0 scale) and counts every class. Each grading period is Major 60% / Daily-Minor 40%;
+each semester is Period 1 40% + Period 2 40% + Semester exam 20%. Levels and core classes are
+guessed from class names and can be changed. Type in any grade, like a semester exam score, to see
+how it changes both GPAs.
 
 Your grades stay in that browser. To use another device, use **Backup & data** >
 **Export backup** and **Import backup**, or just pull again there.

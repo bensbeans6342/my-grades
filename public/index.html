@@ -220,7 +220,7 @@ body.demo #dataBox{display:none}
       <div class="mrow"><span>Algebra II</span><span class="mval ok">81.79</span></div>
       <div class="mrow"><span>Chemistry</span><span class="mval good">91.90</span></div>
       <div class="mrow"><span>Spanish II</span><span class="mval good">95.37</span></div>
-      <div class="mgpa"><div>Semester 1 GPA<b>3.74</b></div><div>Classes<b>5</b></div></div>
+      <div class="mgpa"><div>Ranking GPA<b>3.73</b></div><div>Cumulative GPA<b>3.44</b></div></div>
     </div>
   </section>
   <section class="hwrap">
@@ -235,7 +235,7 @@ body.demo #dataBox{display:none}
       <div class="feature"><h3>Every class at a glance</h3><p>Each class's grade, its assignments, and Skyward's grade for every grading period.</p></div>
       <div class="feature"><h3>What-if scores</h3><p>Change a score or add a pretend assignment and watch your grade move. Your real grade doesn't change.</p></div>
       <div class="feature"><h3>What do I need?</h3><p>Pick a target grade and see the score you need on the next assignment to get there.</p></div>
-      <div class="feature"><h3>GPA calculator</h3><p>Semester GPA by the district's rules, with Distinguished, Honors and Regular levels.</p></div>
+      <div class="feature"><h3>GPA calculator</h3><p>Your ranking GPA (weighted, core classes) and cumulative GPA (unweighted, all classes), by the district's rules.</p></div>
     </div>
   </section>
   <footer class="hwrap hfoot">
@@ -509,15 +509,37 @@ function semGrade(c, sem) {
   for (const [label, , wt] of sem.parts) { const v = termVal(c, label); if (v != null) { tot += v * wt; w += wt; have++; } }
   return w ? { avg: tot / w, complete: have === sem.parts.length } : null;
 }
+// Core classes count toward the ranking GPA: math, science, history/social studies and English.
+// Guessed from the class name; each class can be switched on or off in the GPA calculator.
+const CORE_RE = [
+  /\b(math|algebra|geometry|calculus|pre-?calc(ulus)?|pre-?cal|statistics|trig(onometry)?)\b|\b(calc|stats)\b/i,
+  /\b(science|biology|chemistry|physics|anatomy|physiology|environmental|astronomy|earth|bio|chem)\b/i,
+  /\b(history|geography|government|economics|civics|social studies|gov|econ)\b/i,
+  /\b(english|literature|language arts|composition|rhetoric|ela|eng|lit)\b/i,
+];
+const guessCore = name => !/computer science/i.test(name || '') && CORE_RE.some(re => re.test(name || ''));
+const isCore = c => (c.gpa && typeof c.gpa.core === 'boolean' ? c.gpa.core : guessCore(c.name));
+// Two GPAs, each by semester and overall:
+//  - ranking: weighted (5.0 / 4.5 / 4.0 by level), core classes only
+//  - cumulative: unweighted (4.0 scale), every class that counts
 function gpaSummary() {
-  const per = SEMS.map(() => ({ pts: 0, n: 0 }));
+  const blank = () => SEMS.map(() => ({ pts: 0, n: 0 }));
+  const rank = blank(), cum = blank();
   state.classes.forEach(c => {
     const lv = levelOf(c); if (!lv) return;
-    SEMS.forEach((sem, i) => { const g = semGrade(c, sem); if (g) { per[i].pts += gpaPoints(g.avg, lv); per[i].n++; } });
+    const core = isCore(c);
+    SEMS.forEach((sem, i) => {
+      const g = semGrade(c, sem); if (!g) return;
+      cum[i].pts += gpaPoints(g.avg, 1); cum[i].n++;
+      if (core) { rank[i].pts += gpaPoints(g.avg, lv); rank[i].n++; }
+    });
   });
-  const all = per.reduce((a, x) => ({ pts: a.pts + x.pts, n: a.n + x.n }), { pts: 0, n: 0 });
   const avg = x => (x.n ? x.pts / x.n : null);
-  return { sems: per.map(avg), counts: per.map(x => x.n), overall: avg(all) };
+  const done = per => {
+    const all = per.reduce((a, x) => ({ pts: a.pts + x.pts, n: a.n + x.n }), { pts: 0, n: 0 });
+    return { sems: per.map(avg), counts: per.map(x => x.n), overall: avg(all) };
+  };
+  return { rank: done(rank), cum: done(cum) };
 }
 const fmtGpa = g => (g == null ? '—' : g.toFixed(2));
 
@@ -528,25 +550,25 @@ function renderGPA() {
   <section class="card">
     <h3>${sem.name} <span class="muted small" id="gpaSem${si}"></span></h3>
     <table class="gpatable">
-      <thead><tr><th>Class</th><th>GPA level</th>${sem.parts.map(([l, n]) => `<th class="num">${n}<br><span class="muted">${l}</span></th>`).join('')}<th class="num">Semester</th><th class="num">GPA pts</th></tr></thead>
+      <thead><tr><th>Class</th><th>GPA level</th><th title="Core classes (math, science, history, English) count toward the ranking GPA">Core</th>${sem.parts.map(([l, n]) => `<th class="num">${n}<br><span class="muted">${l}</span></th>`).join('')}<th class="num">Semester</th><th class="num" title="Weighted points, core classes only">Ranking pts</th><th class="num" title="Unweighted points (4.0 scale)">Cumulative pts</th></tr></thead>
       <tbody>${classes.map(c => `<tr data-gcid="${c.id}">
         <td>${esc(c.name)}</td>
         <td><select data-glevel aria-label="Level">${[3, 2, 1, 0].map(v => `<option value="${v}" ${levelOf(c) === v ? 'selected' : ''}>${LEVELS[v]}</option>`).join('')}</select></td>
+        <td><input type="checkbox" data-gcore ${isCore(c) ? 'checked' : ''} aria-label="${esc(c.name)} is a core class"></td>
         ${sem.parts.map(([l]) => {
           const ov = c.gpa && c.gpa.ov && c.gpa.ov[l] !== undefined;
           const d = defaultTerm(c, l);
           return `<td class="num"><input data-gterm="${l}" inputmode="decimal" class="${ov ? 'gchanged' : ''}" value="${esc(ov ? c.gpa.ov[l] : (d ?? ''))}" placeholder="—" aria-label="${esc(c.name)} ${l}"></td>`;
         }).join('')}
-        <td class="num pct" data-gsem="${si}"></td><td class="num pct" data-gpts="${si}"></td>
-      </tr>`).join('') || '<tr><td colspan="7" class="muted small">No classes yet. Pull from Skyward or add a class.</td></tr>'}</tbody>
+        <td class="num pct" data-gsem="${si}"></td><td class="num pct" data-gpts="${si}"></td><td class="num pct" data-gcum="${si}"></td>
+      </tr>`).join('') || '<tr><td colspan="9" class="muted small">No classes yet. Pull from Skyward or add a class.</td></tr>'}</tbody>
     </table>
   </section>`;
   m.innerHTML = `
   <div class="titlerow"><input class="title" value="GPA calculator" readonly tabindex="-1" aria-label="GPA calculator"><button class="ghost" data-act="gpaReset" id="gpaReset">Reset to Skyward grades</button></div>
   <section class="card summary">
-    <div class="big"><div class="lbl">Semester 1 GPA</div><div class="num" id="gpaS0"></div></div>
-    <div class="big"><div class="lbl">Semester 2 GPA</div><div class="num" id="gpaS1"></div></div>
-    <div class="big"><div class="lbl">Overall (all semesters so far)</div><div class="num" id="gpaAll"></div></div>
+    <div class="big"><div class="lbl">Ranking GPA <span class="small">(weighted, core classes)</span></div><div class="num" id="gpaRank"></div><div class="skyline" id="gpaRankSems"></div></div>
+    <div class="big"><div class="lbl">Cumulative GPA <span class="small">(unweighted, all classes)</span></div><div class="num" id="gpaCum"></div><div class="skyline" id="gpaCumSems"></div></div>
   </section>
   <p class="small muted" style="margin:-6px 2px 14px">Grades are filled in from Skyward. If you've tried what-if scores in a class, its current period uses that what-if grade instead. Change any of them to see what happens. Changed ones are purple.</p>
   ${SEMS.map(semTable).join('')}
@@ -556,7 +578,10 @@ function renderGPA() {
       <li>GPA is calculated by semester. Each semester has two grading periods and one semester exam.</li>
       <li>In each grading period: <b>Major = 60%</b>, <b>Daily/Minor = 40%</b>.</li>
       <li>Semester grade: <b>Period 1 = 40%</b>, <b>Period 2 = 40%</b>, <b>Semester exam = 20%</b>. Before the exam, it's the average of the periods so far ("so far").</li>
-      <li>Each semester grade is rounded to a whole number and looked up below. GPA is the average of the points for every class and semester that counts.</li>
+      <li>Each semester grade is rounded to a whole number and looked up below.</li>
+      <li><b>Ranking GPA</b> is weighted: each core class (math, science, history/social studies, English) gets points from its level's column (5.0, 4.5 or 4.0), then they're averaged.</li>
+      <li><b>Cumulative GPA</b> is unweighted: every class that counts gets points from the 4.0 Regular column, whatever its level, then they're averaged.</li>
+      <li>Core classes are guessed from class names. Tick or untick <b>Core</b> to fix any that are wrong.</li>
       <li>Levels are guessed from class names (AP/IB = 5.0 Distinguished, GT/Honors/Pre-AP = 4.5 Honors, everything else = 4.0 Regular, Advisory doesn't count). Change any that are wrong.</li>
     </ul>
     <table class="gpatable small">
@@ -571,24 +596,28 @@ function refreshGPA() {
   renderSidebar();
   if (currentId !== GPA_ID) return;
   const sum = gpaSummary();
-  $('#gpaS0').textContent = fmtGpa(sum.sems[0]);
-  $('#gpaS1').textContent = fmtGpa(sum.sems[1]);
-  $('#gpaAll').textContent = fmtGpa(sum.overall);
+  const semLine = r => SEMS.map((sem, i) => `${sem.name}: ${fmtGpa(r.sems[i])}`).join(' · ');
+  $('#gpaRank').textContent = fmtGpa(sum.rank.overall);
+  $('#gpaCum').textContent = fmtGpa(sum.cum.overall);
+  $('#gpaRankSems').textContent = semLine(sum.rank);
+  $('#gpaCumSems').textContent = semLine(sum.cum);
   SEMS.forEach((sem, si) => {
     const lab = $('#gpaSem' + si);
-    if (lab) lab.textContent = sum.counts[si] ? `· GPA ${fmtGpa(sum.sems[si])} from ${sum.counts[si]} class${sum.counts[si] === 1 ? '' : 'es'}` : '';
+    if (lab) lab.textContent = sum.cum.counts[si] ? `· Ranking ${fmtGpa(sum.rank.sems[si])} · Cumulative ${fmtGpa(sum.cum.sems[si])}` : '';
   });
   document.querySelectorAll('tr[data-gcid]').forEach(tr => {
     const c = state.classes.find(x => x.id === tr.dataset.gcid); if (!c) return;
     const lv = levelOf(c);
     SEMS.forEach((sem, si) => {
       const g = semGrade(c, sem);
-      const cell = tr.querySelector(`[data-gsem="${si}"]`), pts = tr.querySelector(`[data-gpts="${si}"]`);
+      const cell = tr.querySelector(`[data-gsem="${si}"]`), pts = tr.querySelector(`[data-gpts="${si}"]`), cum = tr.querySelector(`[data-gcum="${si}"]`);
       if (!cell) return;
-      if (!g) { cell.textContent = '—'; cell.className = 'num pct'; pts.textContent = '—'; return; }
+      if (!g) { cell.textContent = '—'; cell.className = 'num pct'; pts.textContent = '—'; cum.textContent = '—'; return; }
       cell.innerHTML = `${g.avg.toFixed(2)}${g.complete ? '' : ' <span class="muted small" style="font-weight:400">so far</span>'}`;
       cell.className = 'num pct ' + tone(g.avg);
-      pts.textContent = lv ? gpaPoints(g.avg, lv).toFixed(1) : '—';
+      pts.textContent = lv && isCore(c) ? gpaPoints(g.avg, lv).toFixed(1) : '—';
+      pts.title = !lv ? "Doesn't count" : isCore(c) ? '' : 'Not a core class, so not in the ranking GPA';
+      cum.textContent = lv ? gpaPoints(g.avg, 1).toFixed(1) : '—';
     });
     tr.classList.toggle('excl', !lv);
   });
@@ -621,7 +650,7 @@ function renderSidebar() {
   updateFavicon();
   const ul = $('#classlist');
   const gs = state.classes.length ? gpaSummary() : null;
-  const gpaLi = state.classes.length ? `<li data-id="${GPA_ID}" class="${currentId === GPA_ID ? 'active' : ''}"><span class="nm"><b>GPA calculator</b></span><span class="pill">${gs && gs.overall != null ? gs.overall.toFixed(2) : '—'}</span></li>` : '';
+  const gpaLi = state.classes.length ? `<li data-id="${GPA_ID}" class="${currentId === GPA_ID ? 'active' : ''}"><span class="nm"><b>GPA calculator</b></span><span class="pill">${gs && gs.rank.overall != null ? gs.rank.overall.toFixed(2) : '—'}</span></li>` : '';
   ul.innerHTML = gpaLi + (state.classes.length ? state.classes.map(c => {
     const p = shownPct(c);
     return `<li data-id="${c.id}" class="${c.id === currentId ? 'active' : ''}"><span class="nm">${esc(c.name)}</span><span class="pill ${tone(p)}">${p == null ? '—' : p.toFixed(2)}</span></li>`;
@@ -1000,6 +1029,13 @@ main.addEventListener('input', e => {
 main.addEventListener('change', e => {
   if (currentId === GPA_ID) {
     const t = e.target, tr = t.closest('tr[data-gcid]');
+    if (tr && t.hasAttribute('data-gcore')) {
+      const c = state.classes.find(x => x.id === tr.dataset.gcid); if (!c) return;
+      c.gpa = c.gpa || {};
+      if (t.checked === guessCore(c.name)) delete c.gpa.core; else c.gpa.core = t.checked;
+      document.querySelectorAll(`tr[data-gcid="${c.id}"] input[data-gcore]`).forEach(x => { x.checked = t.checked; });
+      save(); refreshGPA(); return;
+    }
     if (!tr || !t.hasAttribute('data-glevel')) return;
     const c = state.classes.find(x => x.id === tr.dataset.gcid); if (!c) return;
     c.gpa = c.gpa || {}; c.gpa.level = +t.value;
@@ -1755,7 +1791,7 @@ const TOUR = [
   { sel: '#classlist', title: 'Your classes', text: 'After a pull, every class shows up here with its grade. Click a class to see its assignments. You can also add a class by hand below.' },
   { sel: '#wiToggle', parent: '.controls', title: 'What-if mode', text: 'Click "Turn on what-if" (red means it\'s off, green means it\'s on) to change scores or add pretend assignments and see how your grade would move. Your real grade doesn\'t change. "Reset what-if" clears them.' },
   { sel: '#needTarget', parent: '.card', title: 'What do I need?', text: 'Enter the grade you want, and this tells you what you need on the next assignment to get there.' },
-  { sel: '#classlist li[data-id="__gpa"]', alt: '#classlist', title: 'GPA calculator', text: 'Shows your GPA by semester from your period and exam grades. Change any grade to see how it would affect your GPA.' },
+  { sel: '#classlist li[data-id="__gpa"]', alt: '#classlist', title: 'GPA calculator', text: 'Shows your ranking GPA (weighted, core classes only) and cumulative GPA (unweighted, all classes) from your period and exam grades. Change any grade to see how it would affect them.' },
   { sel: '#incogBtn', title: 'Incognito', text: 'Click this to hide every grade behind a blurred fake number, handy when someone\'s looking over your shoulder. Click any grade to see the real one.' },
   { sel: 'aside details:last-of-type', title: 'Backup & data', text: 'Your grades are saved in this browser only. Export a backup to move them to another device.' },
   { title: 'You\'re all set', text: 'Click the ? button at the top any time to see this tour again.' },
